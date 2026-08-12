@@ -22,58 +22,98 @@ st.set_page_config(
 )
 
 st.title("📊 Sistema de Gestão de Apontamentos & Inteligência Artificial")
-st.write("Leitura automática do arquivo de consultas do repositório.")
 
-# Criando as abas
-aba1, aba2 = st.tabs(["📊 Apontamentos (Arquivo Automático)", "🤖 Interação com a I.A."])
+# Criando as abas principais
+aba1, aba2 = st.tabs(["📊 Painel de Apontamentos", "🤖 Interação com a I.A."])
+
+# Nome do arquivo automático no repositório
+NOME_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
+
+# Carrega os dados na sessão
+if "df_apontamentos" not in st.session_state:
+    st.session_state.df_apontamentos = pd.DataFrame()
+
+if st.session_state.df_apontamentos.empty:
+    try:
+        with st.spinner("Carregando base de dados do repositório..."):
+            st.session_state.df_apontamentos = pd.read_excel(NOME_ARQUIVO, engine="pyxlsb")
+    except Exception as e:
+        st.error(f"Erro ao carregar o arquivo automático '{NOME_ARQUIVO}': {e}")
+
+df_global = st.session_state.df_apontamentos
 
 # ==================================
-# ABA 1: LEITURA AUTOMÁTICA DO .XLSB
+# ABA 1: PAINEL DE APONTAMENTOS (Com Filtros Lado Esquerdo)
 # ==================================
 with aba1:
-    st.subheader("📁 Dados Carregados Automaticamente do Repositório")
-    
-    # Nome do arquivo que está na mesma pasta no GitHub
-    nome_arquivo = "03-Consultas_Apontamentos_rev02.xlsb"
+    if not df_global.empty:
+        # Layout dividido em colunas (Esquerda: Filtros tipo Excel / Direita: Tabela de Dados)
+        col_filtros, col_tabela = st.columns([1, 4])
+        
+        with col_filtros:
+            st.markdown("### 🎛️ Filtros")
+            st.markdown("---")
+            
+            # Filtro por Máquina (se a coluna existir)
+            col_maq = next((c for c in df_global.columns if 'máq' in c.lower() or 'maq' in c.lower() or 'c7' in str(df_global[c].values).lower()), None)
+            maquinas_selecionadas = []
+            if col_maq:
+                lista_maquinas = sorted(df_global[col_maq].dropna().unique().astype(str))
+                maquinas_selecionadas = st.multiselect("Máquina", lista_maquinas)
 
-    if "df_apontamentos" not in st.session_state:
-        st.session_state.df_apontamentos = pd.DataFrame()
+            # Filtro por Turno (se a coluna existir)
+            col_turno = next((c for c in df_global.columns if 't' == c.lower() or 'turno' in c.lower()), None)
+            turnos_selecionados = []
+            if col_turno:
+                lista_turnos = sorted(df_global[col_turno].dropna().unique().astype(str))
+                turnos_selecionados = st.multiselect("Turno", lista_turnos)
 
-    try:
-        # Lê o arquivo automaticamente usando pyxlsb
-        if st.session_state.df_apontamentos.empty:
-            with st.spinner("Lendo arquivo do repositório..."):
-                # Se houver abas específicas, você pode passar sheet_name="NomeDaAba"
-                df_auto = pd.read_excel(nome_arquivo, engine="pyxlsb")
-                st.session_state.df_apontamentos = df_auto
-        
-        df_excel = st.session_state.df_apontamentos
-        
-        st.success("✅ Arquivo carregado com sucesso do repositório!")
-        
-        # Métricas rápidas
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total de Registros", len(df_excel))
-        with col2:
-            if 'Eficiência' in df_excel.columns:
-                st.metric("Eficiência Média", f"{pd.to_numeric(df_excel['Eficiência'], errors='coerce').mean():.2f}%")
-            elif 'eficiencia' in df_excel.columns:
-                st.metric("Eficiência Média", f"{pd.to_numeric(df_excel['eficiencia'], errors='coerce').mean():.2f}%")
-        
-        # Exibe a tabela completa
-        st.dataframe(df_excel, use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"Erro ao ler o arquivo automático '{nome_arquivo}': {e}")
-        st.info("Dica: Certifique-se de que a biblioteca 'pyxlsb' está adicionada no seu arquivo requirements.txt.")
+            # Filtro por Centro de Trabalho / CT (se a coluna existir)
+            col_ct = next((c for c in df_global.columns if c.upper() == 'CT' or 'centro' in c.lower()), None)
+            cts_selecionados = []
+            if col_ct:
+                lista_cts = sorted(df_global[col_ct].dropna().unique().astype(str))
+                cts_selecionados = st.multiselect("Centro de Trabalho (CT)", lista_cts)
+                
+            st.markdown("---")
+            if st.button("🔄 Limpar Filtros"):
+                st.rerun()
+
+        with col_tabela:
+            # Aplicação dos filtros dinâmicos
+            df_filtrado = df_global.copy()
+            if maquinas_selecionadas and col_maq:
+                df_filtrado = df_filtrado[df_filtrado[col_maq].astype(str).isin(maquinas_selecionadas)]
+            if turnos_selecionados and col_turno:
+                df_filtrado = df_filtrado[df_filtrado[col_turno].astype(str).isin(turnos_selecionados)]
+            if cts_selecionados and col_ct:
+                df_filtrado = df_filtrado[df_filtrado[col_ct].astype(str).isin(cts_selecionados)]
+
+            # Cabeçalho de Métricas do topo
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                st.metric("Registros Exibidos", len(df_filtrado))
+            with m2:
+                col_ef = next((c for c in df_global.columns if 'eficiência' in c.lower() or 'eficiencia' in c.lower()), None)
+                if col_ef:
+                    eff_media = pd.to_numeric(df_filtrado[col_ef], errors='coerce').mean()
+                    st.metric("Eficiência Média", f"{eff_media:.2f}%")
+            with m3:
+                col_hr = next((c for c in df_global.columns if 'horas' in c.lower() or 'duração' in c.lower()), None)
+                st.metric("Status da Base", "Sincronizado ✅")
+
+            st.markdown("---")
+            # Exibe a tabela principal com layout limpo e interativo
+            st.dataframe(df_filtrado, use_container_width=True, height=600)
+    else:
+        st.info("Aguardando carregamento da planilha do repositório...")
 
 # ==================================
 # ABA 2: INTERAÇÃO COM A I.A.
 # ==================================
 with aba2:
     st.subheader("🤖 Chat Interativo com a I.A.")
-    st.write("Converse com o assistente inteligente para analisar os dados carregados do arquivo automático.")
+    st.write("Converse com o assistente inteligente para analisar os dados filtrados ou extrair insights operacionais.")
 
     if "mensagens_chat" not in st.session_state:
         st.session_state.mensagens_chat = []
@@ -82,33 +122,33 @@ with aba2:
         with st.chat_message(mensagem["role"]):
             st.markdown(mensagem["content"])
 
-    pergunta_usuario = st.chat_input("Ex: Qual máquina apresentou maior eficiência na planilha?")
+    pergunta_usuario = st.chat_input("Ex: Qual máquina teve menor eficiência nesta seleção?")
 
     if pergunta_usuario:
-        st.session_state.mensagens_chat.append({"role": "user", "content": pergunta_usuario})
+        st.session_state.mensagens_chat.append({"role": "user", "content":pergunta_usuario})
         with st.chat_message("user"):
             st.markdown(pergunta_usuario)
 
         if model is not None:
             with st.chat_message("assistant"):
-                with st.spinner("Analisando dados..."):
+                with st.spinner("Analisando dados com a IA..."):
                     try:
-                        df_atual = st.session_state.df_apontamentos
-                        dados_contexto = df_atual.head(100).to_string() if not df_atual.empty else "Nenhum dado carregado."
+                        # Pega uma amostra dos dados atuais para alimentar a IA com contexto preciso
+                        contexto_dados = df_global.head(150).to_string() if not df_global.empty else "Sem dados."
                         
                         prompt_chat = (
-                            f"Você é um assistente especialista em análise de processos industriais, linhas de produção e relatórios PM/OTS. "
-                            f"Aqui estão os dados da planilha de apontamentos:\n{dados_contexto}\n\n"
-                            f"Responda à pergunta do usuário de forma clara, técnica e objetiva: {pergunta_usuario}"
+                            f"Você é um assistente especialista em manufatura industrial, chapas de chassis de ônibus/caminhões e relatórios PM/OTS. "
+                            f"Aqui estão os dados recentes da planilha de apontamentos:\n{contexto_dados}\n\n"
+                            f"Responda à pergunta do usuário de forma técnica, clara e direta: {pergunta_usuario}"
                         )
                         
                         resposta_chat = model.generate_content(prompt_chat)
-                        texto_resposta_chat = resposta_chat.text
+                        texto_resposta = resposta_chat.text
                         
-                        st.markdown(texto_resposta_chat)
-                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_resposta_chat})
+                        st.markdown(texto_resposta)
+                        st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_resposta})
                     except Exception as e:
-                        erro_msg = f"Erro ao processar a resposta com a IA: {e}"
+                        erro_msg = f"Erro na IA: {e}"
                         st.error(erro_msg)
                         st.session_state.mensagens_chat.append({"role": "assistant", "content": erro_msg})
         else:
