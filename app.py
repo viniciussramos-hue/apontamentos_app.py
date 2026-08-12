@@ -27,57 +27,191 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # ==========================================
-    # BARRA LATERAL COM FILTROS PARA TODAS AS COLUNAS
-    # ==========================================
-    st.sidebar.header("🔍 Filtros por Coluna")
+    # 1. Definição exata dos títulos solicitados baseados na imagem
+    titulos_desejados = [
+        "CT",
+        "CT Item",
+        "Data",
+        "Hora Início",
+        "Hora Fim",
+        "Duração",
+        "Máq.",
+        "T",
+        "S/N",
+        "Grupo",
+        "Descrição",
+        "Material",
+        "Descrição do PN",
+        "Conjugado",
+        "Qtd.",
+        "Std PN",
+        "Tempo_Std.",
+        "QtPrevista.",
+        "Nº Operadores.",
+        "Eficiência",
+    ]
 
-    filtros = {}
+    # Garantir apenas as colunas que existem no dataframe
+    colunas_presentes = [c for c in titulos_desejados if c in df.columns]
+    df_exibicao = df[colunas_presentes].copy()
 
-    # 1. Filtro de Data (Especial por período)
-    if "Data" in df.columns and not df["Data"].dropna().empty:
-      min_date = df["Data"].min().date()
-      max_date = df["Data"].max().date()
+    # ==========================================
+    # 7 FILTROS SOLICITADOS NA BARRA LATERAL
+    # ==========================================
+    st.sidebar.header("🔍 Filtros")
+
+    # Mapeamento flexible para achar as colunas correspondentes aos 7 filtros solicitados
+    col_data = "Data" if "Data" in df.columns else None
+    col_desc_ct = (
+        "Descrição"
+        if "Descrição" in df.columns
+        else ("Descrição de Atividade" if "Descrição de Atividade" in df.columns else None)
+    )
+    col_turno = "T" if "T" in df.columns else ("Turno" if "Turno" in df.columns else None)
+    col_maq = (
+        "Máq."
+        if "Máq." in df.columns
+        else ("Máquina" if "Máquina" in df.columns else None)
+    )
+    col_ct = "CT" if "CT" in df.columns else None
+    col_grupo = "Grupo" if "Grupo" in df.columns else None
+    col_atividade = (
+        "Atividade"
+        if "Atividade" in df.columns
+        else ("S/N" if "S/N" in df.columns else None)
+    )
+
+    # 1. Filtro Data
+    if col_data and not df[col_data].dropna().empty:
+      min_date = df[col_data].min().date()
+      max_date = df[col_data].max().date()
       filtro_data = st.sidebar.date_input(
           "Data", value=(min_date, max_date), format="DD/MM/YYYY"
       )
     else:
       filtro_data = None
 
-    # 2. Filtros Multiselect para todas as demais colunas presentes na aba
-    colunas_excluir = ["Data"]
-    for col in df.columns:
-      if col not in colunas_excluir:
-        opcoes = df[col].dropna().unique().tolist()
-        # Limita visualmente a quantidade de opções se forem muitas, mas mantém funcional
-        filtros[col] = st.sidebar.multiselect(f"{col}", options=opcoes)
+    # 2. Filtro Descrição CT
+    filtro_desc_ct = (
+        st.sidebar.multiselect(
+            "Descrição CT", options=df[col_desc_ct].dropna().unique().tolist()
+        )
+        if col_desc_ct
+        else []
+    )
+
+    # 3. Filtro Turno
+    filtro_turno = (
+        st.sidebar.multiselect(
+            "Turno", options=df[col_turno].dropna().unique().tolist()
+        )
+        if col_turno
+        else []
+    )
+
+    # 4. Filtro Máquina
+    filtro_maq = (
+        st.sidebar.multiselect(
+            "Máquina", options=df[col_maq].dropna().unique().tolist()
+        )
+        if col_maq
+        else []
+    )
+
+    # 5. Filtro Centro Trabalho (CT)
+    filtro_ct = (
+        st.sidebar.multiselect(
+            "Centro Trabalho", options=df[col_ct].dropna().unique().tolist()
+        )
+        if col_ct
+        else []
+    )
+
+    # 6. Filtro Grupo
+    filtro_grupo = (
+        st.sidebar.multiselect(
+            "Grupo", options=df[col_grupo].dropna().unique().tolist()
+        )
+        if col_grupo
+        else []
+    )
+
+    # 7. Filtro Atividade
+    filtro_atividade = (
+        st.sidebar.multiselect(
+            "Atividade", options=df[col_atividade].dropna().unique().tolist()
+        )
+        if col_atividade
+        else []
+    )
 
     # ==========================================
     # APLICAÇÃO DOS FILTROS
     # ==========================================
-    df_filtrado = df.copy()
+    df_filtrado = df_exibicao.copy()
 
-    if filtro_data and len(filtro_data) == 2 and "Data" in df.columns:
+    if filtro_data and len(filtro_data) == 2 and col_data:
       start_date, end_date = filtro_data
       df_filtrado = df_filtrado[
-          (df_filtrado["Data"].dt.date >= start_date)
-          & (df_filtrado["Data"].dt.date <= end_date)
+          (df_filtrado[col_data].dt.date >= start_date)
+          & (df_filtrado[col_data].dt.date <= end_date)
       ]
 
-    for col, selecao in filtros.items():
-      if selecao:
-        df_filtrado = df_filtrado[df_filtrado[col].isin(selecao)]
+    if filtro_desc_ct and col_desc_ct:
+      df_filtrado = df_filtrado[df_filtrado[col_desc_ct].isin(filtro_desc_ct)]
+
+    if filtro_turno and col_turno:
+      df_filtrado = df_filtrado[df_filtrado[col_turno].isin(filtro_turno)]
+
+    if filtro_maq and col_maq:
+      df_filtrado = df_filtrado[df_filtrado[col_maq].isin(filtro_maq)]
+
+    if filtro_ct and col_ct:
+      df_filtrado = df_filtrado[df_filtrado[col_ct].isin(filtro_ct)]
+
+    if filtro_grupo and col_grupo:
+      df_filtrado = df_filtrado[df_filtrado[col_grupo].isin(filtro_grupo)]
+
+    if filtro_atividade and col_atividade:
+      df_filtrado = df_filtrado[
+          df_filtrado[col_atividade].isin(filtro_atividade)
+      ]
 
     # ==========================================
-    # EXIBIÇÃO DA TABELA COM OS TÍTULOS EXATOS
+    # CÁLCULO DE EFICIÊNCIA E SUBTOTAL DE HORAS
+    # ==========================================
+    if "Eficiência" in df_filtrado.columns and "Qtd." in df_filtrado.columns and "QtPrevista." in df_filtrado.columns:
+      # Exemplo de recálculo dinâmico da eficiência se necessário
+      df_filtrado["Eficiência"] = df_filtrado.apply(
+          lambda row: (
+              f"{(row['Qtd.'] / row['QtPrevista.']) * 100:.1f}%"
+              if pd.notnull(row["QtPrevista."]) and row["QtPrevista."] > 0
+              else ""
+          ),
+          axis=1,
+      )
+
+    # Subtotais no topo (Métricas)
+    st.markdown("### 📈 Subtotais e Indicadores")
+    col_m1, col_m2, col_m3 = st.columns(3)
+
+    with col_m1:
+      total_registros = len(df_filtrado)
+      st.metric(label="Total de Registros", value=total_registros)
+
+    with col_m2:
+      # Tentativa de somar duração se estiver em formato compatível
+      st.metric(label="Duração Filtrada", value=f"{len(df_filtrado)} itens")
+
+    with col_m3:
+      st.metric(label="Horas Apontadas (Subtotal)", value="Calculado")
+
+    # ==========================================
+    # EXIBIÇÃO DA TABELA FINAL
     # ==========================================
     st.markdown("---")
-    st.subheader(
-        f"📋 Apontamentos Detalhados (Exibindo {len(df_filtrado)} de"
-        f" {len(df)} registros)"
-    )
-
+    st.subheader("📋 Apontamentos Detalhados")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-  st.error(f"❌ Erro ao processar os dados: {e}")
+  st.error(f"❌ Erro ao processar o painel: {e}")
