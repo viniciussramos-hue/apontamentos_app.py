@@ -53,17 +53,28 @@ st.set_page_config(
 )
 
 st.title("📷 Leitor Automático de Apontamento & Eficiência")
-st.write("Tire a foto da folha de apontamento. A IA fará a leitura dos horários, identificará o código (0 para produção) e calculará a eficiência automaticamente.")
+st.write("Tire uma foto ou faça o upload da imagem da folha de apontamento. A IA fará a leitura, identificará o código (0 para produção) e calculará a eficiência automaticamente.")
 
 # ==================================
-# FOTO E PROCESSAMENTO AUTOMÁTICO
+# ESCOLHA: CÂMERA OU UPLOAD DE ARQUIVO
 # ==================================
 
-foto = st.camera_input("Tire uma foto clara da folha de apontamento")
+modo_entrada = st.radio("Escolha o método para enviar a imagem:", ["📸 Tirar Foto (Câmera)", "📁 Enviar Arquivo de Imagem"])
 
-if foto is not None:
-    imagem_pil = Image.open(foto)
-    st.image(imagem_pil, caption="Foto capturada", use_container_width=True)
+imagem_pil = None
+
+if modo_entrada == "📸 Tirar Foto (Câmera)":
+    foto = st.camera_input("Tire uma foto clara da folha de apontamento")
+    if foto is not None:
+        imagem_pil = Image.open(foto)
+else:
+    arquivo_up = st.file_uploader("Escolha a imagem do apontamento", type=["jpg", "jpeg", "png"])
+    if arquivo_up is not None:
+        imagem_pil = Image.open(arquivo_up)
+
+# Se houver uma imagem (seja da câmera ou do upload)
+if imagem_pil is not None:
+    st.image(imagem_pil, caption="Imagem selecionada", use_container_width=True)
 
     if model is not None:
         if st.button("🚀 Processar e Salvar Apontamento com IA", use_container_width=True):
@@ -121,7 +132,7 @@ if foto is not None:
                         st.success(f"✅ Apontamento salvo com sucesso! Código: {codigo} | Início: {h_ini_str} | Fim: {h_fim_str} | Eficiência: {eficiencia:.2f}%")
                         st.rerun()
                     else:
-                        st.error("A hora de término calculada é anterior ou igual à de início. Verifique a foto.")
+                        st.error("A hora de término calculada é anterior ou igual à de início. Verifique a imagem.")
 
                 except Exception as e:
                     st.error(f"Erro ao processar a imagem com a IA: {e}")
@@ -169,7 +180,7 @@ if not df.empty:
         id_para_excluir = st.selectbox("Selecione o ID do apontamento para excluir:", df["id"].tolist())
     
     with col_del2:
-        st.write("") # Espaçamento para alinhar com o selectbox
+        st.write("") 
         st.write("")
         if st.button("🗑️ Deletar Registro Selecionado", use_container_width=True):
             conn.execute("DELETE FROM apontamentos WHERE id = ?", (id_para_excluir,))
