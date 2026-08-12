@@ -3,132 +3,139 @@ import streamlit as st
 
 # Configuração da página para ocupar a largura total
 st.set_page_config(
-    page_title="Apontamentos Detalhados", page_icon="📊", layout="wide"
+    page_title="Gerenciador de Apontamentos", page_icon="📊", layout="wide"
 )
 
-st.title("📊 Painel de Apontamentos Detalhados")
-
-
-# Função fictícia para carregar os dados (substitua pelo seu carregamento real, ex: pd.read_excel ou conexão com banco)
-@st.cache_data
-def carregar_dados():
-  # Exemplo de estrutura compatível com as colunas da imagem
-  data = {
-      "CT": ["PM02", "PM02", "PM02", "PM02"],
-      "CT Item": ["PM02", "PM02", "PM02", "PM02"],
-      "Data": pd.to_datetime(["2026-08-01", "2026-08-01", "2026-08-01", "2026-08-01"]),
-      "Hora Início": ["05:10:00", "05:10:00", "05:15:00", "05:30:00"],
-      "Hora Fim": ["05:30:00", "06:00:00", "05:45:00", "05:50:00"],
-      "Duração": ["00:20:00", "00:50:00", "00:35:00", "00:20:00"],
-      "Máq.": ["C2076", "C2079", "C2077", "C2076"],
-      "T": [11, 11, 11, 11],
-      "S/N": ["S", "N", "N", "N"],
-      "Grupo": [
-          "ATIVIDADES INTERATIVAS",
-          "DIVERSOS",
-          "DIVERSOS",
-          "ATIVIDADES INTERATIVAS",
-      ],
-      "Descrição": ["PPRPS", "DESLOCAMENTO MOD", "SEGURANÇA", "PPRPS"],
-      "Material": ["", "5087337463BLK", "30048290300", ""],
-      "Descrição do PN": [
-          "",
-          "CONTRA REF LG DIANT INT LE GM ASW93003",
-          "SUPORTE PM MAN 2T2701149D-2",
-          "",
-      ],
-      "Conjugado": ["(vazio)", "(vazio)", "(vazio)", "(vazio)"],
-      "Qtd.": [0, 0, 0, 0],
-      "Std PN": [547, 859, 203, 547],
-      "Tempo_Std.": ["0:00:00", "0:00:00", "0:00:00", "0:00:00"],
-      "QtPrevista.": [182, 716, 118, 182],
-      "Nº Operadores.": [3, 3, 2, 3],
-      "Eficiência": ["", "", "", ""],
-  }
-  return pd.DataFrame(data)
-
-
-df = carregar_dados()
+st.title("📊 Painel de Apontamentos e Indicadores")
 
 # ==========================================
-# BARRA LATERAL DE FILTROS
+# UPLOAD E CARREGAMENTO DO ARQUIVO EXCEL
 # ==========================================
-st.sidebar.header("🔍 Filtros")
+uploaded_file = st.sidebar.file_uploader(
+    "Carregar Planilha Excel (.xlsx)", type=["xlsx"]
+)
 
-# 1. Filtro de Datas
-if "Data" in df.columns and not df["Data"].empty:
-  min_date = df["Data"].min().date()
-  max_date = df["Data"].max().date()
-  filtro_data = st.sidebar.date_input(
-      "Período (Data)", value=(min_date, max_date), format="DD/MM/YYYY"
+if uploaded_file is not None:
+  # Lendo as abas disponíveis no arquivo para garantir que pegamos a aba certa
+  excel_file = pd.ExcelFile(uploaded_file)
+  abas_disponiveis = excel_file.sheet_names
+
+  # Seleção da aba (com foco padrão na aba 'Apontamentos' ou 'Apontamentos_Detalhado')
+  aba_selecionada = st.sidebar.selectbox(
+      "Selecione a Aba",
+      options=abas_disponiveis,
+      index=(
+          abas_disponiveis.index("Apontamentos")
+          if "Apontamentos" in abas_disponiveis
+          else 0
+      ),
   )
+
+
+  @st.cache_data
+  def carregar_dados_excel(file, sheet_name):
+    return pd.read_excel(file, sheet_name=sheet_name)
+
+
+  df = carregar_dados_excel(uploaded_file, aba_selecionada)
+
+  # Garantir formato de data se a coluna existir
+  if "Data" in df.columns:
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
+  # ==========================================
+  # BARRA LATERAL DE FILTROS
+  # ==========================================
+  st.sidebar.header("🔍 Filtros de Consulta")
+
+  # 1. Filtro de Datas
+  if "Data" in df.columns and not df["Data"].dropna().empty:
+    min_date = df["Data"].min().date()
+    max_date = df["Data"].max().date()
+    filtro_data = st.sidebar.date_input(
+        "Período (Data)", value=(min_date, max_date), format="DD/MM/YYYY"
+    )
+  else:
+    filtro_data = None
+
+  # 2. Filtro de Máquinas
+  col_maq = (
+      "Máq." if "Máq." in df.columns else ("Maq" if "Maq" in df.columns else None)
+  )
+  maquinas_disponiveis = (
+      df[col_maq].dropna().unique().tolist() if col_maq else []
+  )
+  filtro_maq = st.sidebar.multiselect("Máquinas", options=maquinas_disponiveis)
+
+  # 3. Filtro de Turno (T)
+  col_turno = "T" if "T" in df.columns else None
+  turnos_disponiveis = (
+      df[col_turno].dropna().unique().tolist() if col_turno else []
+  )
+  filtro_turno = st.sidebar.multiselect("Turno (T)", options=turnos_disponiveis)
+
+  # 4. Filtro de Centro de Trabalho (CT)
+  col_ct = "CT" if "CT" in df.columns else None
+  ct_disponiveis = df[col_ct].dropna().unique().tolist() if col_ct else []
+  filtro_ct = st.sidebar.multiselect("Centro de Trabalho (CT)", options=ct_ct_disponiveis)
+
+  # 5. Filtro de Descrição CT / Descrição
+  col_desc = (
+      "Descrição"
+      if "Descrição" in df.columns
+      else ("Descricao" if "Descricao" in df.columns else None)
+  )
+  desc_disponiveis = df[col_desc].dropna().unique().tolist() if col_desc else []
+  filtro_desc = st.sidebar.multiselect(
+      "Descrição / Descrição CT", options=desc_disponiveis
+  )
+
+  # 6. Filtro de Grupo
+  col_grupo = "Grupo" if "Grupo" in df.columns else None
+  grupo_disponiveis = (
+      df[col_grupo].dropna().unique().tolist() if col_grupo else []
+  )
+  filtro_grupo = st.sidebar.multiselect("Grupo", options=grupo_disponiveis)
+
+  # ==========================================
+  # APLICAÇÃO DOS FILTROS NO DATAFRAME
+  # ==========================================
+  df_filtrado = df.copy()
+
+  if filtro_data and len(filtro_data) == 2 and "Data" in df.columns:
+    start_date, end_date = filtro_data
+    df_filtrado = df_filtrado[
+        (df_filtrado["Data"].dt.date >= start_date)
+        & (df_filtrado["Data"].dt.date <= end_date)
+    ]
+
+  if filtro_maq and col_maq:
+    df_filtrado = df_filtrado[df_filtrado[col_maq].isin(filtro_maq)]
+
+  if filtro_turno and col_turno:
+    df_filtrado = df_filtrado[df_filtrado[col_turno].isin(filtro_turno)]
+
+  if filtro_ct and col_ct:
+    df_filtrado = df_filtrado[df_filtrado[col_ct].isin(filtro_ct)]
+
+  if filtro_desc and col_desc:
+    df_filtrado = df_filtrado[df_filtrado[col_desc].isin(filtro_desc)]
+
+  if filtro_grupo and col_grupo:
+    df_filtrado = df_filtrado[df_filtrado[col_grupo].isin(filtro_grupo)]
+
+  # ==========================================
+  # EXIBIÇÃO DA TABELA NA TELA PRINCIPAL
+  # ==========================================
+  st.subheader(
+      f"📋 Dados da Aba: `{aba_selecionada}` (Registros exibidos:"
+      f" {len(df_filtrado)} de {len(df)})"
+  )
+
+  st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+
 else:
-  filtro_data = None
-
-# 2. Filtro de Máquinas
-maquinas_disponiveis = (
-    df["Máq."].dropna().unique().tolist() if "Máq." in df.columns else []
-)
-filtro_maq = st.sidebar.multiselect("Máquinas", options=maquinas_disponiveis)
-
-# 3. Filtro de Turno (T)
-turnos_disponiveis = df["T"].dropna().unique().tolist() if "T" in df.columns else []
-filtro_turno = st.sidebar.multiselect("Turno (T)", options=turnos_disponiveis)
-
-# 4. Filtro de Centro de Trabalho (CT)
-ct_disponiveis = df["CT"].dropna().unique().tolist() if "CT" in df.columns else []
-filtro_ct = st.sidebar.multiselect("Centro de Trabalho (CT)", options=ct_disponiveis)
-
-# 5. Filtro de Descrição CT (Mapeado aqui para a coluna 'Descrição' ou equivalente do CT)
-desc_ct_disponiveis = (
-    df["Descrição"].dropna().unique().tolist()
-    if "Descrição" in df.columns
-    else []
-)
-filtro_desc_ct = st.sidebar.multiselect(
-    "Descrição CT / Atividade", options=desc_ct_disponiveis
-)
-
-# 6. Filtro de Grupo
-grupo_disponiveis = (
-    df["Grupo"].dropna().unique().tolist() if "Grupo" in df.columns else []
-)
-filtro_grupo = st.sidebar.multiselect("Grupo", options=grupo_disponiveis)
-
-# ==========================================
-# APLICAÇÃO DOS FILTROS NO DATAFRAME
-# ==========================================
-df_filtrado = df.copy()
-
-if filtro_data and len(filtro_data) == 2:
-  start_date, end_date = filtro_data
-  df_filtrado = df_filtrado[
-      (df_filtrado["Data"].dt.date >= start_date)
-      & (df_filtrado["Data"].dt.date <= end_date)
-  ]
-
-if filtro_maq:
-  df_filtrado = df_filtrado[df_filtrado["Máq."].isin(filtro_maq)]
-
-if filtro_turno:
-  df_filtrado = df_filtrado[df_filtrado["T"].isin(filtro_turno)]
-
-if filtro_ct:
-  df_filtrado = df_filtrado[df_filtrado["CT"].isin(filtro_ct)]
-
-if filtro_desc_ct:
-  df_filtrado = df_filtrado[df_filtrado["Descrição"].isin(filtro_desc_ct)]
-
-if filtro_grupo:
-  df_filtrado = df_filtrado[df_filtrado["Grupo"].isin(filtro_grupo)]
-
-# ==========================================
-# EXIBIÇÃO DA TABELA NA TELA PRINCIPAL
-# ==========================================
-st.subheader(
-    f"📋 Apontamentos Detalhados (Registros encontrados:"
-    f" {len(df_filtrado)})"
-)
-
-# Exibição interativa com ajuste dinâmico de largura nas colunas
-st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+  st.info(
+      "📂 Por favor, faça o upload da planilha Excel na barra lateral para"
+      " carregar os dados da aba de apontamentos."
+  )
