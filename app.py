@@ -10,29 +10,37 @@ import json
 # ==================================
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # Utilizando o modelo atualizado e estável com suporte a visão
     model = genai.GenerativeModel("gemini-3.5-flash")
 except Exception as e:
     model = None
 
 # ==================================
-# BANCO DE DADOS
+# BANCO DE DADOS (ESTRUTURA ORIGINAL PM/OTS)
 # ==================================
 
 @st.cache_resource
 def conectar_banco():
     conn = sqlite3.connect(
-        "apontamentos.db",
+        "apontamentos_pm_ots.db",
         check_same_thread=False
     )
 
     conn.execute("""
     CREATE TABLE IF NOT EXISTS apontamentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        codigo TEXT,
+        op TEXT,
+        qtd_op TEXT,
+        codigo_desenho TEXT,
+        codigo_maxion TEXT,
+        operacao TEXT,
+        codigo_paradas TEXT,
         hora_inicio TEXT,
         hora_fim TEXT,
-        duracao_esperada REAL,
+        n_bat TEXT,
+        pcs_boas TEXT,
+        sucata TEXT,
+        n_etiqueta TEXT,
+        motivo TEXT,
         duracao_real REAL,
         eficiencia REAL
     )
@@ -48,13 +56,13 @@ conn = conectar_banco()
 # ==================================
 
 st.set_page_config(
-    page_title="Leitor de Apontamento por IA",
-    page_icon="📷",
+    page_title="Leitor PM/OTS - Apontamento & IA",
+    page_icon="📋",
     layout="wide"
 )
 
-st.title("📷 Leitor Automático de Apontamento & Eficiência")
-st.write("Tire uma foto ou faça o upload da imagem da folha de apontamento. A IA fará a leitura, identificará o código (0 para produção) e calculará a eficiência automaticamente.")
+st.title("📋 Leitor Automático - Relatório de Auto Apontamento (PM/OTS)")
+st.write("Envie a foto ou arquivo do relatório. A IA fará a leitura exata de todos os campos do formulário original.")
 
 # ==================================
 # ESCOLHA: CÂMERA OU UPLOAD DE ARQUIVO
@@ -78,17 +86,18 @@ if imagem_pil is not None:
     st.image(imagem_pil, caption="Imagem selecionada", use_container_width=True)
 
     if model is not None:
-        if st.button("🚀 Processar e Salvar Apontamento com IA", use_container_width=True):
-            with st.spinner("Analisando imagem e calculando eficiência..."):
+        if st.button("🚀 Processar e Salvar Linhas do Apontamento com IA", use_container_width=True):
+            with st.spinner("Lendo a folha de apontamento PM/OTS..."):
                 try:
                     prompt = (
-                        "Analise esta imagem de um Relatório de Auto Apontamento. "
-                        "Identifique as informações da linha principal preenchida. "
-                        "Procure pela coluna 'Código' (Atv / Cód Paradas) — lembre-se que o código '0' significa produção, "
-                        "extraia o Código, a 'Hora de Início' (HH:MM) e a 'Hora de Fim' (HH:MM). "
-                        "Estime também ou defina uma duracao_esperada padrão em minutos (ex: 60). "
-                        "Retorne a resposta EXATAMENTE em formato JSON puro, contendo as chaves: "
-                        "codigo, hora_inicio, hora_fim, duracao_esperada."
+                        "Analise esta imagem do 'Relatório de Auto Apontamento - PM/OTS'. "
+                        "Extraia todas as linhas preenchidas do relatório. "
+                        "Para cada linha, extraia os seguintes campos: "
+                        "\"op\", \"qtd_op\", \"codigo_desenho\", \"codigo_maxion\", \"operacao\", "
+                        "\"codigo_paradas\", \"hora_inicio\", \"hora_fim\", \"n_bat\", \"pcs_boas\", "
+                        "\"sucata\", \"n_etiqueta\", \"motivo\". "
+                        "Retorne a resposta EXATAMENTE em formato JSON puro contendo uma lista de objetos chamada 'apontamentos' (ex: {\"apontamentos\": [...]}). "
+                        "Se algum campo estiver vazio na imagem, retorne string vazia \"\"."
                     )
                     
                     resposta = model.generate_content([prompt, imagem_pil])
@@ -100,40 +109,64 @@ if imagem_pil is not None:
                         texto_resposta = texto_resposta[inicio_json:fim_json]
 
                     dados_ia = json.loads(texto_resposta)
+                    lista_linhas = dados_ia.get("apontamentos", [])
                     
-                    codigo = str(dados_ia.get("codigo", "0"))
-                    h_ini_str = dados_ia.get("hora_inicio", "08:00")
-                    h_fim_str = dados_ia.get("hora_fim", "09:00")
-                    duracao_esperada = float(dados_ia.get("duracao_esperada", 60.0))
-                    
-                    partes_ini = h_ini_str.split(":")
-                    partes_fim = h_fim_str.split(":")
-                    
-                    inicio_min = int(partes_ini[0]) * 60 + int(partes_ini[1])
-                    fim_min = int(partes_fim[0]) * 60 + int(partes_fim[1])
+                    if lista_linhas:
+                        salvos = 0
+                        for item in lista_linhas:
+                            op = str(item.get("op", ""))
+                            if not op: # Ignora linhas vazias
+                                continue
+                                
+                            qtd_op = str(item.get("qtd_op", ""))
+                            codigo_desenho = str(item.get("codigo_desenho", ""))
+                            codigo_maxion = str(item.get("codigo_maxion", ""))
+                            operacao = str(item.get("operacao", ""))
+                            codigo_paradas = str(item.get("codigo_paradas", "0"))
+                            h_ini_str = str(item.get("hora_inicio", "00:00"))
+                            h_fim_str = str(item.get("hora_fim", "00:00"))
+                            n_bat = str(item.get("n_bat", ""))
+                            pcs_boas = str(item.get("pcs_boas", ""))
+                            sucata = str(item.get("sucata", ""))
+                            n_etiqueta = str(item.get("n_etiqueta", ""))
+                            motivo = str(item.get("motivo", ""))
+                            
+                            # Cálculo de duração real se houver horários válidos
+                            duracao_real = 0.0
+                            eficiencia = 0.0
+                            try:
+                                partes_ini = h_ini_str.split(":")
+                                partes_fim = h_fim_str.split(":")
+                                inicio_min = int(partes_ini[0]) * 60 + int(partes_ini[1])
+                                fim_min = int(partes_fim[0]) * 60 + int(partes_fim[1])
+                                if fim_min <= inicio_min:
+                                    fim_min += 1440
+                                duracao_real = float(fim_min - inicio_min)
+                                
+                                # Estimativa baseada em padrão de 60 min se necessário
+                                duracao_esperada = 60.0
+                                if duracao_real > 0:
+                                    eficiencia = (duracao_esperada / duracao_real) * 100
+                            except:
+                                pass
 
-                    if fim_min <= inicio_min:
-                        fim_min += 1440
-
-                    duracao_real = fim_min - inicio_min
-                    
-                    if duracao_real > 0:
-                        eficiencia = (duracao_esperada / duracao_real) * 100
-                        
-                        conn.execute(
-                            """
-                            INSERT INTO apontamentos
-                            (codigo, hora_inicio, hora_fim, duracao_esperada, duracao_real, eficiencia)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                            """,
-                            (codigo, h_ini_str, h_fim_str, duracao_esperada, duracao_real, eficiencia)
-                        )
+                            conn.execute(
+                                """
+                                INSERT INTO apontamentos
+                                (op, qtd_op, codigo_desenho, codigo_maxion, operacao, codigo_paradas, 
+                                hora_inicio, hora_fim, n_bat, pcs_boas, sucata, n_etiqueta, motivo, duracao_real, eficiencia)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (op, qtd_op, codigo_desenho, codigo_maxion, operacao, codigo_paradas, 
+                                h_ini_str, h_fim_str, n_bat, pcs_boas, sucata, n_etiqueta, motivo, duracao_real, eficiencia)
+                            )
+                            salvos += 1
+                            
                         conn.commit()
-                        
-                        st.success(f"✅ Apontamento salvo com sucesso! Código: {codigo} | Início: {h_ini_str} | Fim: {h_fim_str} | Eficiência: {eficiencia:.2f}%")
+                        st.success(f"✅ {salvos} linha(s) de apontamento extraídas e salvas com sucesso!")
                         st.rerun()
                     else:
-                        st.error("A hora de término calculada é anterior ou igual à de início. Verifique a imagem.")
+                        st.warning("A IA não encontrou linhas preenchidas na imagem.")
 
                 except Exception as e:
                     st.error(f"Erro ao processar a imagem com a IA: {e}")
@@ -145,7 +178,7 @@ if imagem_pil is not None:
 # ==================================
 
 st.markdown("---")
-st.subheader("📋 Histórico de Apontamentos Realizados")
+st.subheader("📋 Histórico de Apontamentos (PM/OTS)")
 
 df = pd.read_sql_query(
     "SELECT * FROM apontamentos ORDER BY id DESC",
@@ -158,19 +191,13 @@ st.dataframe(
 )
 
 if not df.empty:
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric(
-            "Total de Registros",
-            len(df)
-        )
-
-    with col2:
-        st.metric(
-            "Eficiência Média",
-            f"{df['eficiencia'].mean():.2f}%"
-        )
+    col_met1, col_met2 = st.columns(2)
+    with col_met1:
+        st.metric("Total de Registros", len(df))
+    with col_met2:
+        valid_eff = df[df['eficiencia'] > 0]['eficiencia']
+        if not valid_eff.empty:
+            st.metric("Eficiência Média", f"{valid_eff.mean():.2f}%")
 
     st.markdown("---")
     st.subheader("🗑️ Gerenciar Registros")
@@ -188,3 +215,55 @@ if not df.empty:
             conn.commit()
             st.success(f"Registro ID {id_para_excluir} excluído com sucesso!")
             st.rerun()
+
+# ==================================
+# BOTÃO / CHAT DE INTERAÇÃO COM A I.A.
+# ==================================
+
+st.markdown("---")
+st.subheader("🤖 Chat Interativo com a I.A. sobre os Apontamentos")
+st.write("Tire dúvidas, peça análises de produção ou pergunte sobre os registros salvos no banco de dados.")
+
+# Inicializa o histórico de chat na sessão do Streamlit
+if "mensagens_chat" not in st.session_state:
+    st.session_state.mensagens_chat = []
+
+# Exibe as mensagens anteriores do chat
+for mensagem in st.session_state.mensagens_chat:
+    with st.chat_message(mensagem["role"]):
+        st.markdown(mensagem["content"])
+
+# Caixa de entrada de texto do chat
+pergunta_usuario = st.chat_input("Ex: Qual foi a operação com maior quantidade de peças boas?")
+
+if pergunta_usuario:
+    # Adiciona a mensagem do usuário ao histórico
+    st.session_state.mensagens_chat.append({"role": "user", "content": pergunta_usuario})
+    with st.chat_message("user"):
+        st.markdown(pergunta_usuario)
+
+    if model is not None:
+        with st.chat_message("assistant"):
+            with st.spinner("Pensando..."):
+                try:
+                    # Converte os dados atuais do banco em formato texto para a IA consultar
+                
+                    dados_contexto = df.to_string() if not df.empty else "Nenhum registro no banco ainda."
+                    
+                    prompt_chat = (
+                        f"Você é um assistente especialista em produção industrial e análise de relatórios PM/OTS. "
+                        f"Aqui estão os dados atuais salvos no banco de dados do sistema:\n{dados_contexto}\n\n"
+                        f"Responda à seguinte pergunta do usuário de forma clara, prestativa e objetiva: {pergunta_usuario}"
+                    )
+                    
+                    resposta_chat = model.generate_content(prompt_chat)
+                    texto_resposta_chat = resposta_chat.text
+                    
+                    st.markdown(texto_resposta_chat)
+                    st.session_state.mensagens_chat.append({"role": "assistant", "content": texto_resposta_chat})
+                except Exception as e:
+                    erro_msg = f"Erro ao consultar a IA: {e}"
+                    st.error(erro_msg)
+                    st.session_state.mensagens_chat.append({"role": "assistant", "content": erro_msg})
+    else:
+        st.warning("⚠️ IA não configurada.")
