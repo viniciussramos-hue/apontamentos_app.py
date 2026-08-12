@@ -82,7 +82,6 @@ if foto is not None:
                     resposta = model.generate_content([prompt, imagem_pil])
                     texto_resposta = resposta.text.strip()
                     
-                    # Limpeza de blocos markdown caso a IA retorne
                     if "```json" in texto_resposta:
                         texto_resposta = texto_resposta.split("```json")[1].split("```")[0].strip()
                     elif "```" in texto_resposta:
@@ -95,7 +94,6 @@ if foto is not None:
                     h_fim_str = dados_ia.get("hora_fim", "09:00")
                     duracao_esperada = float(dados_ia.get("duracao_esperada", 60.0))
                     
-                    # Converte horários para cálculo de minutos
                     partes_ini = h_ini_str.split(":")
                     partes_fim = h_fim_str.split(":")
                     
@@ -110,7 +108,6 @@ if foto is not None:
                     if duracao_real > 0:
                         eficiencia = (duracao_esperada / duracao_real) * 100
                         
-                        # Salva direto no banco sem formulário manual
                         conn.execute(
                             """
                             INSERT INTO apontamentos
@@ -122,6 +119,7 @@ if foto is not None:
                         conn.commit()
                         
                         st.success(f"✅ Apontamento salvo com sucesso! Código: {codigo} | Início: {h_ini_str} | Fim: {h_fim_str} | Eficiência: {eficiencia:.2f}%")
+                        st.rerun()
                     else:
                         st.error("A hora de término calculada é anterior ou igual à de início. Verifique a foto.")
 
@@ -131,7 +129,7 @@ if foto is not None:
         st.warning("⚠️ Chave de API do Gemini não configurada.")
 
 # ==================================
-# HISTÓRICO
+# HISTÓRICO & EXCLUSÃO
 # ==================================
 
 st.markdown("---")
@@ -161,3 +159,20 @@ if not df.empty:
             "Eficiência Média",
             f"{df['eficiencia'].mean():.2f}%"
         )
+
+    st.markdown("---")
+    st.subheader("🗑️ Gerenciar Registros")
+    
+    col_del1, col_del2 = st.columns([2, 1])
+    
+    with col_del1:
+        id_para_excluir = st.selectbox("Selecione o ID do apontamento para excluir:", df["id"].tolist())
+    
+    with col_del2:
+        st.write("") # Espaçamento para alinhar com o selectbox
+        st.write("")
+        if st.button("🗑️ Deletar Registro Selecionado", use_container_width=True):
+            conn.execute("DELETE FROM apontamentos WHERE id = ?", (id_para_excluir,))
+            conn.commit()
+            st.success(f"Registro ID {id_para_excluir} excluído com sucesso!")
+            st.rerun()
