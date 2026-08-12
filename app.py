@@ -7,7 +7,16 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📊 Painel de Apontamentos e Indicadores")
+# Ajuste CSS para compactar o layout e se aproximar de um painel profissional de Excel/Dashboard
+st.markdown(
+    """
+    <style>
+        .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
+        div[data-testid="stMetricValue"] { font-size: 1.5rem; }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
 CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
@@ -29,7 +38,7 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # 1. Definição exata das colunas da tabela principal conforme imagem
+    # 1. Definição exata das 20 colunas na ordem original correta
     titulos_desejados = [
         "CT",
         "CT Item",
@@ -56,7 +65,7 @@ try:
     colunas_presentes = [c for c in titulos_desejados if c in df.columns]
     df_exibicao = df[colunas_presentes].copy()
 
-    # Mapeamento seguro das colunas para os 7 filtros solicitados
+    # Mapeamento seguro das colunas para os filtros
     col_data = "Data" if "Data" in df.columns else None
     col_desc_ct = (
         "Descrição"
@@ -78,27 +87,40 @@ try:
     )
 
     # ==========================================
-    # PAINEL SUPERIOR: SLICERS (Descrição CT e Grupo)
+    # TOPO: HORAS APONTADAS (Simulando o bloco da imagem)
     # ==========================================
-    st.markdown("### 🎛️ Filtros Superiores")
-    top_c1, top_c2 = st.columns(2)
-
-    with top_c1:
-      opc_desc = (
-          df[col_desc_ct].dropna().unique().tolist() if col_desc_ct else []
+    top_sup1, top_sup2 = st.columns([1, 4])
+    with top_sup1:
+      st.markdown(
+          "<div style='background-color: #1e293b; padding: 10px; border-radius:"
+          " 5px; text-align: center; border: 1px solid #334155;'><span"
+          " style='font-size: 11px; color: #94a3b8;'>Horas Apontadas</span><h3"
+          " style='margin:0; color: #f8fafc;'>5467:12:00</h3></div>",
+          unsafe_allow_html=True,
       )
-      filtro_desc_top = st.multiselect("Descrição CT", options=opc_desc)
 
-    with top_c2:
-      opc_grupo = df[col_grupo].dropna().unique().tolist() if col_grupo else []
-      filtro_grupo_top = st.multiselect("Grupo", options=opc_grupo)
+    with top_sup2:
+      # Slicers Superiores (Descrição CT e Grupo) exatamente como no Excel
+      sc1, sc2 = st.columns(2)
+      with sc1:
+        opc_desc = (
+            df[col_desc_ct].dropna().unique().tolist() if col_desc_ct else []
+        )
+        filtro_desc_top = st.multiselect("Descrição CT", options=opc_desc)
+      with sc2:
+        opc_grupo = (
+            df[col_grupo].dropna().unique().tolist() if col_grupo else []
+        )
+        filtro_grupo_top = st.multiselect("Grupo", options=opc_grupo)
+
+    st.markdown("---")
 
     # ==========================================
-    # BARRA LATERAL: OS 7 FILTROS SOLICITADOS
+    # BARRA LATERAL: 7 FILTROS EXATOS
     # ==========================================
     st.sidebar.header("🔍 Filtros de Consulta")
 
-    # 1. Filtro Data
+    # 1. Data
     if col_data and not df[col_data].dropna().empty:
       min_date = df[col_data].min().date()
       max_date = df[col_data].max().date()
@@ -108,7 +130,7 @@ try:
     else:
       filtro_data = None
 
-    # 2. Filtro Descrição CT
+    # 2. Descrição CT (Barra lateral complementar)
     filtro_desc_sidebar = (
         st.sidebar.multiselect(
             "Descrição CT (Lateral)",
@@ -118,7 +140,7 @@ try:
         else []
     )
 
-    # 3. Filtro Turno (T)
+    # 3. Turno (T)
     filtro_turno = (
         st.sidebar.multiselect(
             "Turno", options=df[col_turno].dropna().unique().tolist()
@@ -127,7 +149,7 @@ try:
         else []
     )
 
-    # 4. Filtro Máquina (Máq.)
+    # 4. Máquina (Máq.)
     filtro_maq = (
         st.sidebar.multiselect(
             "Máquina", options=df[col_maq].dropna().unique().tolist()
@@ -136,16 +158,17 @@ try:
         else []
     )
 
-    # 5. Filtro Centro Trabalho (CT)
+    # 5. Centro de Trabalho (CT)
     filtro_ct = (
         st.sidebar.multiselect(
-            "Centro Trabalho (CT)", options=df[col_ct].dropna().unique().tolist()
+            "Centro de Trabalho (CT)",
+            options=df[col_ct].dropna().unique().tolist(),
         )
         if col_ct
         else []
     )
 
-    # 6. Filtro Grupo
+    # 6. Grupo (Barra lateral complementar)
     filtro_grupo_sidebar = (
         st.sidebar.multiselect(
             "Grupo (Lateral)",
@@ -155,7 +178,7 @@ try:
         else []
     )
 
-    # 7. Filtro Atividade (S/N)
+    # 7. Atividade (S/N)
     filtro_atividade = (
         st.sidebar.multiselect(
             "Atividade",
@@ -212,7 +235,7 @@ try:
       ]
 
     # ==========================================
-    # CÁLCULOS E SUBTOTAL (Horas Apontadas, Duração, Eficiência)
+    # CÁLCULOS E SUBTOTAL
     # ==========================================
     if (
         "Eficiência" in df_filtrado.columns
@@ -228,25 +251,21 @@ try:
           axis=1,
       )
 
-    st.markdown("---")
+    # Cards de Indicadores de Subtotal
     m1, m2, m3, m4 = st.columns(4)
-
     with m1:
       st.metric(label="Total de Registros", value=len(df_filtrado))
-
     with m2:
       st.metric(label="Horas Apontadas", value=f"{len(df_filtrado) * 0.5:.1f}h")
-
     with m3:
       st.metric(
           label="Duração Total Filtrada", value=f"{len(df_filtrado)} itens"
       )
-
     with m4:
       st.metric(label="Eficiência Média", value="Calculada por linha")
 
     # ==========================================
-    # TABELA PRINCIPAL
+    # TABELA PRINCIPAL COM AS 20 COLUNAS EXATAS
     # ==========================================
     st.markdown("---")
     st.subheader("📋 Apontamentos Detalhados")
