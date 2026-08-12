@@ -4,3 +4,4 @@ plotly
 pdfplumber
 openai
 google-genai
+google-generativeai
