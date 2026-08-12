@@ -10,6 +10,7 @@ import json
 # ==================================
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # Nome do modelo padrão atualizado e compatível
     model = genai.GenerativeModel("gemini-1.5-flash")
 except Exception as e:
     model = None
@@ -93,7 +94,6 @@ if imagem_pil is not None:
                     resposta = model.generate_content([prompt, imagem_pil])
                     texto_resposta = resposta.text.strip()
                     
-                    # Limpeza segura sem conflito de caracteres
                     if "{" in texto_resposta and "}" in texto_resposta:
                         inicio_json = texto_resposta.find("{")
                         fim_json = texto_resposta.rfind("}") + 1
