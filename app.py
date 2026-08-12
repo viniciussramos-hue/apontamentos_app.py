@@ -1,5 +1,12 @@
+# --- MENU LATERAL ---
+st.sidebar.title("🏭 Apontamento PM/OTS")
+menu = st.sidebar.radio(
+    "Navegação",
+    ["Registrar Apontamento", "Painel de Apontamentos & Horas", "Totais de Peças Prontas"]
+)
+
 # --- SEÇÃO 1: REGISTRAR APONTAMENTO ---
-if menu == "📝 Registrar Apontamento":
+if menu == "Registrar Apontamento":
     st.subheader("📝 Novo Apontamento (Físico / Digital com OCR Inteligente)")
     st.write("Faça o upload ou tire a foto do relatório preenchido para o preenchimento automático.")
 
@@ -134,3 +141,70 @@ if menu == "📝 Registrar Apontamento":
             """, (turno, maquina, data_ap.strftime("%Y-%m-%d"), responsável, op, qtd_op, cod_desenho, cod_maxion, operacao, codigo_parada_val, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo))
             conn.commit()
             st.success("Apontamento registrado com sucesso!")
+
+# --- SEÇÃO 2: PAINEL DE APONTAMENTOS & HORAS ---
+elif menu == "Painel de Apontamentos & Horas":
+    st.subheader("📋 Painel de Controle de Apontamentos e Verificação de Horas")
+    
+    query = """
+        SELECT a.*, p.descricao as desc_parada 
+        FROM apontamentos a 
+        LEFT JOIN paradas_mestre p ON a.codigo_parada = p.codigo 
+        ORDER BY a.id DESC
+    """
+    df_apont = pd.read_sql(query, conn)
+
+    if not df_apont.empty:
+        def calcular_horas(row):
+            try:
+                t1 = datetime.strptime(row["hora_inicio"], "%H:%M")
+                t2 = datetime.strptime(row["hora_fim"], "%H:%M")
+                diff = (t2 - t1).total_seconds() / 3600
+                return round(diff, 2)
+            except:
+                return 0.0
+
+        df_apont["Horas_Apontadas"] = df_apont.apply(calcular_horas, axis=1)
+        st.dataframe(df_apont, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum apontamento cadastrado até o momento.")
+
+# --- SEÇÃO 3: TOTAIS DE PEÇAS PRONTAS ---
+elif menu == "Totais de Peças Prontas":
+    st.subheader("📦 Somatório e Controle de Peças Prontas")
+    st.write("Considera apenas operações finalizadas (onde o numerador é igual ao denominador, ex: 20/20, 10/10).")
+
+    df_pecas = pd.read_sql("SELECT * FROM apontamentos", conn)
+
+    if not df_pecas.empty:
+        def é_peca_pronta(op_str):
+            try:
+                if "/" in str(op_str):
+                    partes = op_str.split("/")
+                    p1 = float(partes[0].strip())
+                    p2 = float(partes[1].strip())
+                    return p1 == p2 and p1 > 0
+            except:
+                return False
+            return False
+
+        df_pecas["Pronta"] = df_pecas["operacao"].apply(é_peca_pronta)
+        df_prontas_filtradas = df_pecas[df_pecas["Pronta"] == True]
+
+        if not df_prontas_filtradas.empty:
+            total_geral_boas = df_prontas_filtradas["pcas_boas"].sum()
+            total_geral_sucata = df_prontas_filtradas["sucata"].sum()
+
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.metric("Total de Peças Boas (Prontas)", f"{total_geral_boas:,.0f}")
+            with col_m2:
+                st.metric("Total de Sucatas (Prontas)", f"{total_geral_sucata:,.0f}")
+
+            st.markdown("### Detalhamento por Código Maxion / Desenho")
+            df_agrupado = df_prontas_filtradas.groupby(["codigo_maxion", "codigo_desenho", "operacao"])[["pcas_boas", "sucata"]].sum().reset_index()
+            st.dataframe(df_agrupado, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Nenhuma peça pronta identificada com operação concluída (ex: 20/20) nos registros atuais.")
+    else:
+        st.info("Nenhum dado disponível para cálculo de peças.")
