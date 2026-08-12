@@ -5,6 +5,7 @@ import sqlite3
 import openai
 import base64
 import json
+import os
 
 # --- CONFIGURACAO DA PAGINA ---
 st.set_page_config(
@@ -73,7 +74,7 @@ def popular_paradas_iniciais():
             (2005, "Falta Operador", "Diversos"),
             (2011, "Cafe/Agua/Banheiro", "Diversos"),
             (2013, "Falta de Energia Geral", "Diversos"),
-            (1500, "Reuniao", "Atividades Interativas"),
+                    (1500, "Reuniao", "Atividades Interativas"),
             (1503, "Treinamento", "Atividades Interativas")
         ]
         c.executemany("INSERT OR IGNORE INTO paradas_mestre (codigo, descricao, categoria) VALUES (?, ?, ?)", dados_iniciais)
@@ -111,12 +112,12 @@ if menu == "Registrar Apontamento":
                     bytes_imagem = foto_apontamento.getvalue()
                     base64_imagem = base64.b64encode(bytes_imagem).decode('utf-8')
                     
-                    # Pega a chave de forma segura do Streamlit Secrets
-                    api_key_openai = st.secrets.get("OPENAI_API_KEY", "")
-                    if not api_key_openai:
-                        st.error("Chave da API da OpenAI não configurada nos Secrets do Streamlit.")
+                    # Usa a chave salva nos segredos do Streamlit Cloud
+                    api_key = st.secrets.get("OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
+                    if not api_key:
+                        st.error("Configure a chave OPENAI_API_KEY nos Secrets do Streamlit Cloud.")
                     else:
-                        client = openai.OpenAI(api_key=api_key_openai)
+                        client = openai.OpenAI(api_key=api_key)
                         
                         resposta = client.chat.completions.create(
                             model="gpt-4o",
