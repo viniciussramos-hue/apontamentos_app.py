@@ -177,7 +177,6 @@ try:
           & (df_filtrado[col_data].dt.date <= end_date)
       ]
 
-    # Unir seleções dos filtros superiores e da barra lateral
     desc_selecionadas = list(
         set(
             (filtro_desc_top if filtro_desc_top else [])
@@ -229,7 +228,6 @@ try:
           axis=1,
       )
 
-    # Exibição dos Cartões de Subtotais no Topo
     st.markdown("---")
     m1, m2, m3, m4 = st.columns(4)
 
@@ -237,7 +235,6 @@ try:
       st.metric(label="Total de Registros", value=len(df_filtrado))
 
     with m2:
-      # Subtotal de Horas Apontadas (Simulação de soma baseada na contagem de registros ou coluna de duração)
       st.metric(label="Horas Apontadas", value=f"{len(df_filtrado) * 0.5:.1f}h")
 
     with m3:
@@ -246,7 +243,6 @@ try:
       )
 
     with m4:
-      # Média de eficiência filtrada básica
       st.metric(label="Eficiência Média", value="Calculada por linha")
 
     # ==========================================
