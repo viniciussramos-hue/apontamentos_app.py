@@ -9,7 +9,6 @@ import json
 # CONFIGURAÇÃO DA IA (GEMINI)
 # ==================================
 try:
-    # Puxa a chave de forma segura dos segredos do Streamlit
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
@@ -73,11 +72,11 @@ else:
     if arquivo_up is not None:
         imagem_pil = Image.open(arquivo_up)
 
-# Se houver uma imagem (seja da câmera ou do upload)
+# Se houver uma imagem
 if imagem_pil is not None:
     st.image(imagem_pil, caption="Imagem selecionada", use_container_width=True)
 
-    if model is not None and API_KEY != "SUA_CHAVE_API_AQUI":
+    if model is not None:
         if st.button("🚀 Processar e Salvar Apontamento com IA", use_container_width=True):
             with st.spinner("Analisando imagem e calculando eficiência..."):
                 try:
@@ -94,7 +93,6 @@ if imagem_pil is not None:
                     resposta = model.generate_content([prompt, imagem_pil])
                     texto_resposta = resposta.text.strip()
                     
-                    # Tratamento seguro para remover formatação markdown
                     texto_resposta = texto_resposta.replace("```json", "").replace("```", "").strip()
 
                     dados_ia = json.loads(texto_resposta)
@@ -136,7 +134,7 @@ if imagem_pil is not None:
                 except Exception as e:
                     st.error(f"Erro ao processar a imagem com a IA: {e}")
     else:
-        st.warning("⚠️ Insira uma chave de API válida do Gemini na variável `API_KEY` no topo do código.")
+        st.warning("⚠️ Chave de API do Gemini não configurada corretamente nos Secrets do Streamlit.")
 
 # ==================================
 # HISTÓRICO & EXCLUSÃO
