@@ -10,8 +10,8 @@ import json
 # ==================================
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # Utilizando o modelo padrão estável atual da API v1
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    # Atualizado para o modelo moderno mais recente
+    model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
     model = None
 
