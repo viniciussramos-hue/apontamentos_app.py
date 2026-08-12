@@ -1,16 +1,95 @@
+from datetime import date, datetime
+import pandas as pd
+import streamlit as st
+import sqlite3
+
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(
+    page_title="Gestao de Apontamentos PM/OTS",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# --- CONEXÃO COM O BANCO DE DADOS ---
+conn = sqlite3.connect("apontamentos_fabrica.db", check_same_thread=False)
+c = conn.cursor()
+
+# Criação das tabelas essenciais
+c.execute("""
+    CREATE TABLE IF NOT EXISTS paradas_mestre (
+        codigo INTEGER PRIMARY KEY,
+        descricao TEXT,
+        categoria TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS apontamentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        turno TEXT,
+        maquina TEXT,
+        data_apontamento TEXT,
+        responsavel TEXT,
+        op TEXT,
+        qtd_op REAL,
+        codigo_desenho TEXT,
+        codigo_maxion TEXT,
+        operacao TEXT,
+        codigo_parada INTEGER,
+        hora_inicio TEXT,
+        hora_fim TEXT,
+        num_batidas REAL,
+        pcas_boas REAL,
+        sucata REAL,
+        num_etiqueta TEXT,
+        motivo TEXT
+    )
+""")
+conn.commit()
+
+# --- CARREGA DADOS MESTRES DE PARADA ---
+def popular_paradas_iniciais():
+    count = c.execute("SELECT COUNT(*) FROM paradas_mestre").fetchone()[0]
+    if count == 0:
+        dados_iniciais = [
+            (7011, "Limpeza - (Sucatas, Batoques, Plasticos e Oleo)", "Processos"),
+            (7016, "Inspecao por frequencia", "Processos"),
+            (7091, "Lixando Pcs", "Processos"),
+            (7182, "Falta Operacao Anterior", "Processos"),
+            (7183, "Falta Operacao Posterior", "Processos"),
+            (4002, "Quebra/Desg Punsao", "Ferramentaria"),
+            (4003, "Quebra/Desg Matriz", "Ferramentaria"),
+            (4010, "Limpeza de Batoque", "Ferramentaria"),
+            (5001, "Falta AR Comprimido", "Manutencao"),
+            (5002, "Ponte em Manutencao", "Manutencao"),
+            (5024, "Manut Eletrica", "Manutencao"),
+            (8001, "Setup", "Setup"),
+            (8003, "Prep. Ferramenta", "Setup"),
+            (8047, "Troca de Tipo", "Setup"),
+            (2005, "Falta Operador", "Diversos"),
+            (2011, "Cafe/Agua/Banheiro", "Diversos"),
+            (2013, "Falta de Energia Geral", "Diversos"),
+            (1500, "Reuniao", "Atividades Interativas"),
+            (1503, "Treinamento", "Atividades Interativas")
+        ]
+        c.executemany("INSERT OR IGNORE INTO paradas_mestre (codigo, descricao, categoria) VALUES (?, ?, ?)", dados_iniciais)
+        conn.commit()
+
+popular_paradas_iniciais()
+
 # --- MENU LATERAL ---
-st.sidebar.title("🏭 Apontamento PM/OTS")
+st.sidebar.title("Apontamento PM/OTS")
 menu = st.sidebar.radio(
-    "Navegação",
-    ["Registrar Apontamento", "Painel de Apontamentos & Horas", "Totais de Peças Prontas"]
+    "Navegacao",
+    ["Registrar Apontamento", "Painel de Apontamentos & Horas", "Totais de Pecas Prontas"]
 )
 
 # --- SEÇÃO 1: REGISTRAR APONTAMENTO ---
 if menu == "Registrar Apontamento":
-    st.subheader("📝 Novo Apontamento (Físico / Digital com OCR Inteligente)")
-    st.write("Faça o upload ou tire a foto do relatório preenchido para o preenchimento automático.")
+    st.subheader("Novo Apontamento (Fisico / Digital com OCR Inteligente)")
+    st.write("Faca o upload ou tire a foto do relatorio preenchido para o preenchimento automatico.")
 
-    # Inicializa variáveis de estado para os campos se não existirem
     if "form_data" not in st.session_state:
         st.session_state.form_data = {
             "turno": "",
@@ -30,13 +109,12 @@ if menu == "Registrar Apontamento":
             "motivo": ""
         }
 
-    # Upload da foto do apontamento físico
-    foto_apontamento = st.file_uploader("Enviar Foto do Relatório Preenchido", type=["jpg", "jpeg", "png"])
+    foto_apontamento = st.file_uploader("Enviar Foto do Relatorio Preenchido", type=["jpg", "jpeg", "png"])
     
     if foto_apontamento:
-        st.image(foto_apontamento, caption="Foto do Apontamento Físico Anexada", width=400)
+        st.image(foto_apontamento, caption="Foto do Apontamento Fisico Anexada", width=400)
         
-        if st.button("🤖 Ler Relatório Automaticamente com IA", use_container_width=True):
+        if st.button("Ler Relatorio Automaticamente com IA", use_container_width=True):
             with st.spinner("Analisando a foto e extraindo os dados manuscritos..."):
                 try:
                     import openai
@@ -53,12 +131,12 @@ if menu == "Registrar Apontamento":
                         messages=[
                             {
                                 "role": "system",
-                                "content": "Você é um assistente especializado em extrair dados de formulários de apontamento de produção fabril manuscritos. Retorne estritamente um JSON com as chaves: turno, maquina, responsavel, op, qtd_op, codigo_desenho, codigo_maxion, operacao, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo."
+                                "content": "Voce e um assistente especializado em extrair dados de formularios de apontamento de producao fabril manuscritos. Retorne estritamente um JSON com as chaves: turno, maquina, responsavel, op, qtd_op, codigo_desenho, codigo_maxion, operacao, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo."
                             },
                             {
                                 "role": "user",
                                 "content": [
-                                    {"type": "text", "text": "Extraia os dados preenchidos neste relatório de auto apontamento."},
+                                    {"type": "text", "text": "Extraia os dados preenchidos neste relatorio de auto apontamento."},
                                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_imagem}"}}
                                 ]
                             }
@@ -85,12 +163,11 @@ if menu == "Registrar Apontamento":
                         "etiqueta": dados_extraidos.get("num_etiqueta", ""),
                         "motivo": dados_extraidos.get("motivo", "")
                     }
-                    st.success("✨ Dados extraídos e preenchidos automaticamente com sucesso!")
+                    st.success("Dados extraidos e preenchidos automaticamente com sucesso!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao processar a imagem com IA: {e}.")
 
-    # Formulário preenchido com os dados (automáticos ou manuais)
     d = st.session_state.form_data
     with st.form("form_apontamento"):
         col1, col2, col3, col4 = st.columns(4)
@@ -98,38 +175,38 @@ if menu == "Registrar Apontamento":
             turno = st.text_input("Turno", value=d["turno"])
             op = st.text_input("O.P.", value=d["op"])
         with col2:
-            maquina = st.text_input("Máquina", value=d["maquina"])
+            maquina = st.text_input("Maquina", value=d["maquina"])
             qtd_op = st.number_input("Qtd O.P.", value=d["qtd_op"], min_value=0.0, step=1.0)
         with col3:
             data_ap = st.date_input("Data", value=date.today())
-            cod_desenho = st.text_input("Código Desenho", value=d["cod_desenho"])
+            cod_desenho = st.text_input("Codigo Desenho", value=d["cod_desenho"])
         with col4:
-            responsável = st.text_input("Responsável Preenchimento", value=d["responsavel"])
-            cod_maxion = st.text_input("Código Maxion", value=d["cod_maxion"])
+            responsavel = st.text_input("Responsavel Preenchimento", value=d["responsavel"])
+            cod_maxion = st.text_input("Codigo Maxion", value=d["cod_maxion"])
 
         st.markdown("---")
         col_op1, col_op2, col_op3, col_op4 = st.columns(4)
         with col_op1:
-            operacao = st.text_input("Operação (Ex: 20/20, 10/20)", value=d["operacao"])
+            operacao = st.text_input("Operacao (Ex: 20/20, 10/20)", value=d["operacao"])
         with col_op2:
             df_paradas = pd.read_sql("SELECT codigo, descricao FROM paradas_mestre", conn)
             lista_paradas = [f"{row.codigo} - {row.descricao}" for _, row in df_paradas.iterrows()]
-            parada_escolhida = st.selectbox("Código Paradas", lista_paradas)
+            parada_escolhida = st.selectbox("Codigo Paradas", lista_paradas)
             codigo_parada_val = int(parada_escolhida.split(" - ")[0])
         with col_op3:
-            hora_inicio = st.text_input("Início (HH:MM)", value=d["inicio"])
+            hora_inicio = st.text_input("Inicio (HH:MM)", value=d["inicio"])
         with col_op4:
             hora_fim = st.text_input("Fim (HH:MM)", value=d["fim"])
 
         col_pr1, col_pr2, col_pr3, col_pr4 = st.columns(4)
         with col_pr1:
-            num_batidas = st.number_input("Nº Batidas", value=d["batidas"], min_value=0.0, step=1.0)
+            num_batidas = st.number_input("N Batidas", value=d["batidas"], min_value=0.0, step=1.0)
         with col_pr2:
-            pcas_boas = st.number_input("Pçs Boas", value=d["pcas_boas"], min_value=0.0, step=1.0)
+            pcas_boas = st.number_input("Pcs Boas", value=d["pcas_boas"], min_value=0.0, step=1.0)
         with col_pr3:
             sucata = st.number_input("Sucata", value=d["sucata"], min_value=0.0, step=1.0)
         with col_pr4:
-            num_etiqueta = st.text_input("Nº Etiqueta", value=d["etiqueta"])
+            num_etiqueta = st.text_input("N Etiqueta", value=d["etiqueta"])
 
         motivo = st.text_area("Problemas ocorridos / Motivo da Parada", value=d["motivo"])
 
@@ -138,13 +215,13 @@ if menu == "Registrar Apontamento":
             c.execute("""
                 INSERT INTO apontamentos (turno, maquina, data_apontamento, responsavel, op, qtd_op, codigo_desenho, codigo_maxion, operacao, codigo_parada, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (turno, maquina, data_ap.strftime("%Y-%m-%d"), responsável, op, qtd_op, cod_desenho, cod_maxion, operacao, codigo_parada_val, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo))
+            """, (turno, maquina, data_ap.strftime("%Y-%m-%d"), responsavel, op, qtd_op, cod_desenho, cod_maxion, operacao, codigo_parada_val, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo))
             conn.commit()
             st.success("Apontamento registrado com sucesso!")
 
 # --- SEÇÃO 2: PAINEL DE APONTAMENTOS & HORAS ---
 elif menu == "Painel de Apontamentos & Horas":
-    st.subheader("📋 Painel de Controle de Apontamentos e Verificação de Horas")
+    st.subheader("Painel de Controle de Apontamentos e Verificacao de Horas")
     
     query = """
         SELECT a.*, p.descricao as desc_parada 
@@ -167,17 +244,17 @@ elif menu == "Painel de Apontamentos & Horas":
         df_apont["Horas_Apontadas"] = df_apont.apply(calcular_horas, axis=1)
         st.dataframe(df_apont, use_container_width=True, hide_index=True)
     else:
-        st.info("Nenhum apontamento cadastrado até o momento.")
+        st.info("Nenhum apontamento cadastrado ate o momento.")
 
 # --- SEÇÃO 3: TOTAIS DE PEÇAS PRONTAS ---
-elif menu == "Totais de Peças Prontas":
-    st.subheader("📦 Somatório e Controle de Peças Prontas")
-    st.write("Considera apenas operações finalizadas (onde o numerador é igual ao denominador, ex: 20/20, 10/10).")
+elif menu == "Totais de Pecas Prontas":
+    st.subheader("Somatorio e Controle de Pecas Prontas")
+    st.write("Considera apenas operacoes finalizadas (onde o numerador e igual ao denominador, ex: 20/20, 10/10).")
 
     df_pecas = pd.read_sql("SELECT * FROM apontamentos", conn)
 
     if not df_pecas.empty:
-        def é_peca_pronta(op_str):
+        def e_peca_pronta(op_str):
             try:
                 if "/" in str(op_str):
                     partes = op_str.split("/")
@@ -188,7 +265,7 @@ elif menu == "Totais de Peças Prontas":
                 return False
             return False
 
-        df_pecas["Pronta"] = df_pecas["operacao"].apply(é_peca_pronta)
+        df_pecas["Pronta"] = df_pecas["operacao"].apply(e_peca_pronta)
         df_prontas_filtradas = df_pecas[df_pecas["Pronta"] == True]
 
         if not df_prontas_filtradas.empty:
@@ -197,14 +274,14 @@ elif menu == "Totais de Peças Prontas":
 
             col_m1, col_m2 = st.columns(2)
             with col_m1:
-                st.metric("Total de Peças Boas (Prontas)", f"{total_geral_boas:,.0f}")
+                st.metric("Total de Pecas Boas (Prontas)", f"{total_geral_boas:,.0f}")
             with col_m2:
                 st.metric("Total de Sucatas (Prontas)", f"{total_geral_sucata:,.0f}")
 
-            st.markdown("### Detalhamento por Código Maxion / Desenho")
+            st.markdown("### Detalhamento por Codigo Maxion / Desenho")
             df_agrupado = df_prontas_filtradas.groupby(["codigo_maxion", "codigo_desenho", "operacao"])[["pcas_boas", "sucata"]].sum().reset_index()
             st.dataframe(df_agrupado, use_container_width=True, hide_index=True)
         else:
-            st.warning("Nenhuma peça pronta identificada com operação concluída (ex: 20/20) nos registros atuais.")
+            st.warning("Nenhuma peca pronta identificada com operacao concluida (ex: 20/20) nos registros atuais.")
     else:
-        st.info("Nenhum dado disponível para cálculo de peças.")
+        st.info("Nenhum dado disponivel para calculo de pecas.")
