@@ -9,7 +9,7 @@ import json
 # CONFIGURAÇÃO DA IA (GEMINI)
 # ==================================
 # Insira sua chave da API abaixo entre as aspas
-API_KEY = "SUA_CHAVE_API_AQUI" 
+API_KEY = "AIzaSySeuCodigoDeChaveRealAqui..."
 
 try:
     if API_KEY != "SUA_CHAVE_API_AQUI":
