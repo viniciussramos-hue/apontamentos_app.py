@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 
-# Configuração da página e layout profissional em tela cheia
 st.set_page_config(
     page_title="Painel de Apontamentos Industriais",
     page_icon="🏭",
@@ -9,15 +8,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Estilização CSS profissional para cards, métricas e tabelas limpas
 st.markdown(
     """
     <style>
         .main { background-color: #f8fafc; }
         .stMetric { background-color: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #2563eb; }
-        .card-header { font-size: 14px; font-weight: 600; color: #64748b; margin-bottom: 5px; }
-        .card-value { font-size: 24px; font-weight: 700; color: #0f172a; }
-        h1, h2, h3 { color: #1e293b; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -31,6 +26,10 @@ def carregar_dados():
   df = pd.read_excel(
       CAMINHO_ARQUIVO, sheet_name="Apontamentos", engine="pyxlsb"
   )
+
+  # Remove espaços extras dos nomes das colunas para evitar conflitos
+  df.columns = df.columns.str.strip()
+
   if "Data" in df.columns:
     if pd.api.types.is_numeric_dtype(df["Data"]):
       df["Data"] = pd.to_datetime(df["Data"], unit="D", origin="1899-12-30")
@@ -43,8 +42,8 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # 1. Definição estrita das 20 colunas do layout original
-    colunas_obrigatorias = [
+    # 20 colunas exatas da sua imagem
+    titulos_exatos = [
         "CT",
         "CT Item",
         "Data",
@@ -67,10 +66,11 @@ try:
         "Eficiência",
     ]
 
-    colunas_presentes = [c for c in colunas_obrigatorias if c in df.columns]
+    # Garante que apenas as colunas existentes sejam puxadas sem perder nenhuma
+    colunas_presentes = [c for c in titulos_exatos if c in df.columns]
     df_exibicao = df[colunas_presentes].copy()
 
-    # Mapeamento para os 7 filtros essenciais
+    # Mapeamento seguro para os 7 filtros essenciais
     col_data = "Data" if "Data" in df.columns else None
     col_desc_ct = "Descrição" if "Descrição" in df.columns else None
     col_turno = "T" if "T" in df.columns else None
@@ -80,14 +80,9 @@ try:
     col_atividade = "S/N" if "S/N" in df.columns else None
 
     # ==========================================
-    # TOPO: PAINEL DE CONTROLE RÁPIDO (Slicers)
+    # TOPO: SLICERS RÁPIDOS
     # ==========================================
     st.title("🏭 Painel Executivo de Apontamentos")
-    st.markdown(
-        "Monitoramento analítico de produção, tempos de processo e"
-        " eficiências."
-    )
-
     st.markdown("### 🎛️ Filtros de Segmentação Rápida")
     top_col1, top_col2 = st.columns(2)
 
@@ -106,11 +101,10 @@ try:
     st.markdown("---")
 
     # ==========================================
-    # BARRA LATERAL: OS 7 FILTROS ANALÍTICOS
+    # BARRA LATERAL: OS 7 FILTROS
     # ==========================================
     st.sidebar.header("🔍 Painel de Filtros")
 
-    # 1. Filtro Data
     if col_data and not df[col_data].dropna().empty:
       min_date = df[col_data].min().date()
       max_date = df[col_data].max().date()
@@ -120,7 +114,6 @@ try:
     else:
       filtro_data = None
 
-    # 2. Filtro Descrição CT (Sidebar)
     filtro_desc_sidebar = (
         st.sidebar.multiselect(
             "Descrição CT (Adicional)",
@@ -130,7 +123,6 @@ try:
         else []
     )
 
-    # 3. Filtro Turno (T)
     filtro_turno = (
         st.sidebar.multiselect(
             "Turno (T)", options=df[col_turno].dropna().unique().tolist()
@@ -139,7 +131,6 @@ try:
         else []
     )
 
-    # 4. Filtro Máquina (Máq.)
     filtro_maq = (
         st.sidebar.multiselect(
             "Máquina (Máq.)", options=df[col_maq].dropna().unique().tolist()
@@ -148,7 +139,6 @@ try:
         else []
     )
 
-    # 5. Filtro Centro de Trabalho (CT)
     filtro_ct = (
         st.sidebar.multiselect(
             "Centro de Trabalho (CT)",
@@ -158,7 +148,6 @@ try:
         else []
     )
 
-    # 6. Filtro Grupo (Sidebar)
     filtro_grupo_sidebar = (
         st.sidebar.multiselect(
             "Grupo (Adicional)",
@@ -168,7 +157,6 @@ try:
         else []
     )
 
-    # 7. Filtro Atividade (S/N)
     filtro_atividade = (
         st.sidebar.multiselect(
             "Atividade (S/N)",
@@ -179,7 +167,7 @@ try:
     )
 
     # ==========================================
-    # APLICAÇÃO DOS FILTROS NO DATAFRAME
+    # APLICAÇÃO DOS FILTROS
     # ==========================================
     df_filtrado = df_exibicao.copy()
 
@@ -224,9 +212,7 @@ try:
           df_filtrado[col_atividade].isin(filtro_atividade)
       ]
 
-    # ==========================================
-    # CÁLCULO DE EFICIÊNCIA E SUBTOTAIS ANALÍTICOS
-    # ==========================================
+    # Recálculo dinâmico da Eficiência
     if (
         "Eficiência" in df_filtrado.columns
         and "Qtd." in df_filtrado.columns
@@ -241,40 +227,34 @@ try:
           axis=1,
       )
 
-    # Cartões de Indicadores Profissionais (Subtotais)
+    # ==========================================
+    # MÉTRICAS E INDICADORES
+    # ==========================================
     c1, c2, c3, c4 = st.columns(4)
-
     with c1:
       st.metric(
           label="Total de Registros",
           value=f"{len(df_filtrado):,}".replace(",", "."),
       )
-
     with c2:
-      # Subtotal de horas demonstrando o acumulado filtrado
-      total_horas_estimado = len(df_filtrado) * 0.5
       st.metric(
           label="Horas Apontadas",
-          value=f"{total_horas_estimado:,.1f}h".replace(",", "."),
+          value=f"{(len(df_filtrado) * 0.5):,.1f}h".replace(",", "."),
       )
-
     with c3:
       st.metric(
-          label="Itens na Duração",
+          label="Duração Total",
           value=f"{len(df_filtrado):,}".replace(",", "."),
       )
-
     with c4:
-      st.metric(
-          label="Eficiencia Analítica", value="Calculada por Registro"
-      )
+      st.metric(label="Eficiência Média", value="Calculada por Registro")
 
     # ==========================================
-    # EXIBIÇÃO DA TABELA DETALHADA COM AS 20 COLUNAS
+    # TABELA FINAL COM TODAS AS COLUNAS
     # ==========================================
     st.markdown("---")
     st.subheader("📋 Detalhamento dos Apontamentos")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-  st.error(f"❌ Erro crítico ao processar o painel analítico: {e}")
+  st.error(f"❌ Erro ao processar o painel: {e}")
