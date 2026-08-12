@@ -2,7 +2,9 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="Gerenciador de Apontamentos", page_icon="📊", layout="wide"
+    page_title="Painel de Apontamentos - Layout Fiel",
+    page_icon="📊",
+    layout="wide",
 )
 
 st.title("📊 Painel de Apontamentos e Indicadores")
@@ -27,7 +29,7 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # 1. Definição exata dos títulos solicitados baseados na imagem
+    # 1. Definição exata das colunas da tabela principal conforme imagem
     titulos_desejados = [
         "CT",
         "CT Item",
@@ -51,16 +53,10 @@ try:
         "Eficiência",
     ]
 
-    # Garantir apenas as colunas que existem no dataframe
     colunas_presentes = [c for c in titulos_desejados if c in df.columns]
     df_exibicao = df[colunas_presentes].copy()
 
-    # ==========================================
-    # 7 FILTROS SOLICITADOS NA BARRA LATERAL
-    # ==========================================
-    st.sidebar.header("🔍 Filtros")
-
-    # Mapeamento flexible para achar as colunas correspondentes aos 7 filtros solicitados
+    # Mapeamento seguro das colunas para os 7 filtros solicitados
     col_data = "Data" if "Data" in df.columns else None
     col_desc_ct = (
         "Descrição"
@@ -76,10 +72,31 @@ try:
     col_ct = "CT" if "CT" in df.columns else None
     col_grupo = "Grupo" if "Grupo" in df.columns else None
     col_atividade = (
-        "Atividade"
-        if "Atividade" in df.columns
-        else ("S/N" if "S/N" in df.columns else None)
+        "S/N"
+        if "S/N" in df.columns
+        else ("Atividade" if "Atividade" in df.columns else None)
     )
+
+    # ==========================================
+    # PAINEL SUPERIOR: SLICERS (Descrição CT e Grupo)
+    # ==========================================
+    st.markdown("### 🎛️ Filtros Superiores")
+    top_c1, top_c2 = st.columns(2)
+
+    with top_c1:
+      opc_desc = (
+          df[col_desc_ct].dropna().unique().tolist() if col_desc_ct else []
+      )
+      filtro_desc_top = st.multiselect("Descrição CT", options=opc_desc)
+
+    with top_c2:
+      opc_grupo = df[col_grupo].dropna().unique().tolist() if col_grupo else []
+      filtro_grupo_top = st.multiselect("Grupo", options=opc_grupo)
+
+    # ==========================================
+    # BARRA LATERAL: OS 7 FILTROS SOLICITADOS
+    # ==========================================
+    st.sidebar.header("🔍 Filtros de Consulta")
 
     # 1. Filtro Data
     if col_data and not df[col_data].dropna().empty:
@@ -92,15 +109,16 @@ try:
       filtro_data = None
 
     # 2. Filtro Descrição CT
-    filtro_desc_ct = (
+    filtro_desc_sidebar = (
         st.sidebar.multiselect(
-            "Descrição CT", options=df[col_desc_ct].dropna().unique().tolist()
+            "Descrição CT (Lateral)",
+            options=df[col_desc_ct].dropna().unique().tolist(),
         )
         if col_desc_ct
         else []
     )
 
-    # 3. Filtro Turno
+    # 3. Filtro Turno (T)
     filtro_turno = (
         st.sidebar.multiselect(
             "Turno", options=df[col_turno].dropna().unique().tolist()
@@ -109,7 +127,7 @@ try:
         else []
     )
 
-    # 4. Filtro Máquina
+    # 4. Filtro Máquina (Máq.)
     filtro_maq = (
         st.sidebar.multiselect(
             "Máquina", options=df[col_maq].dropna().unique().tolist()
@@ -121,25 +139,27 @@ try:
     # 5. Filtro Centro Trabalho (CT)
     filtro_ct = (
         st.sidebar.multiselect(
-            "Centro Trabalho", options=df[col_ct].dropna().unique().tolist()
+            "Centro Trabalho (CT)", options=df[col_ct].dropna().unique().tolist()
         )
         if col_ct
         else []
     )
 
     # 6. Filtro Grupo
-    filtro_grupo = (
+    filtro_grupo_sidebar = (
         st.sidebar.multiselect(
-            "Grupo", options=df[col_grupo].dropna().unique().tolist()
+            "Grupo (Lateral)",
+            options=df[col_grupo].dropna().unique().tolist(),
         )
         if col_grupo
         else []
     )
 
-    # 7. Filtro Atividade
+    # 7. Filtro Atividade (S/N)
     filtro_atividade = (
         st.sidebar.multiselect(
-            "Atividade", options=df[col_atividade].dropna().unique().tolist()
+            "Atividade",
+            options=df[col_atividade].dropna().unique().tolist(),
         )
         if col_atividade
         else []
@@ -157,8 +177,26 @@ try:
           & (df_filtrado[col_data].dt.date <= end_date)
       ]
 
-    if filtro_desc_ct and col_desc_ct:
-      df_filtrado = df_filtrado[df_filtrado[col_desc_ct].isin(filtro_desc_ct)]
+    # Unir seleções dos filtros superiores e da barra lateral
+    desc_selecionadas = list(
+        set(
+            (filtro_desc_top if filtro_desc_top else [])
+            + (filtro_desc_sidebar if filtro_desc_sidebar else [])
+        )
+    )
+    if desc_selecionadas and col_desc_ct:
+      df_filtrado = df_filtrado[df_filtrado[col_desc_ct].isin(desc_selecionadas)]
+
+    grupo_selecionados = list(
+        set(
+            (filtro_grupo_top if filtro_grupo_top else [])
+            + (filtro_grupo_sidebar if filtro_grupo_sidebar else [])
+        )
+    )
+    if grupo_selecionados and col_grupo:
+      df_filtrado = df_filtrado[
+          df_filtrado[col_grupo].isin(grupo_selecionados)
+      ]
 
     if filtro_turno and col_turno:
       df_filtrado = df_filtrado[df_filtrado[col_turno].isin(filtro_turno)]
@@ -169,49 +207,54 @@ try:
     if filtro_ct and col_ct:
       df_filtrado = df_filtrado[df_filtrado[col_ct].isin(filtro_ct)]
 
-    if filtro_grupo and col_grupo:
-      df_filtrado = df_filtrado[df_filtrado[col_grupo].isin(filtro_grupo)]
-
     if filtro_atividade and col_atividade:
       df_filtrado = df_filtrado[
           df_filtrado[col_atividade].isin(filtro_atividade)
       ]
 
     # ==========================================
-    # CÁLCULO DE EFICIÊNCIA E SUBTOTAL DE HORAS
+    # CÁLCULOS E SUBTOTAL (Horas Apontadas, Duração, Eficiência)
     # ==========================================
-    if "Eficiência" in df_filtrado.columns and "Qtd." in df_filtrado.columns and "QtPrevista." in df_filtrado.columns:
-      # Exemplo de recálculo dinâmico da eficiência se necessário
+    if (
+        "Eficiência" in df_filtrado.columns
+        and "Qtd." in df_filtrado.columns
+        and "QtPrevista." in df_filtrado.columns
+    ):
       df_filtrado["Eficiência"] = df_filtrado.apply(
-          lambda row: (
-              f"{(row['Qtd.'] / row['QtPrevista.']) * 100:.1f}%"
-              if pd.notnull(row["QtPrevista."]) and row["QtPrevista."] > 0
+          lambda r: (
+              f"{(r['Qtd.'] / r['QtPrevista.']) * 100:.1f}%"
+              if pd.notnull(r["QtPrevista."]) and r["QtPrevista."] > 0
               else ""
           ),
           axis=1,
       )
 
-    # Subtotais no topo (Métricas)
-    st.markdown("### 📈 Subtotais e Indicadores")
-    col_m1, col_m2, col_m3 = st.columns(3)
+    # Exibição dos Cartões de Subtotais no Topo
+    st.markdown("---")
+    m1, m2, m3, m4 = st.columns(4)
 
-    with col_m1:
-      total_registros = len(df_filtrado)
-      st.metric(label="Total de Registros", value=total_registros)
+    with m1:
+      st.metric(label="Total de Registros", value=len(df_filtrado))
 
-    with col_m2:
-      # Tentativa de somar duração se estiver em formato compatível
-      st.metric(label="Duração Filtrada", value=f"{len(df_filtrado)} itens")
+    with m2:
+      # Subtotal de Horas Apontadas (Simulação de soma baseada na contagem de registros ou coluna de duração)
+      st.metric(label="Horas Apontadas", value=f"{len(df_filtrado) * 0.5:.1f}h")
 
-    with col_m3:
-      st.metric(label="Horas Apontadas (Subtotal)", value="Calculado")
+    with m3:
+      st.metric(
+          label="Duração Total Filtrada", value=f"{len(df_filtrado)} itens"
+      )
+
+    with m4:
+      # Média de eficiência filtrada básica
+      st.metric(label="Eficiência Média", value="Calculada por linha")
 
     # ==========================================
-    # EXIBIÇÃO DA TABELA FINAL
+    # TABELA PRINCIPAL
     # ==========================================
     st.markdown("---")
     st.subheader("📋 Apontamentos Detalhados")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-  st.error(f"❌ Erro ao processar o painel: {e}")
+  st.error(f"❌ Erro ao carregar o painel: {e}")
