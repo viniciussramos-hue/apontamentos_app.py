@@ -8,15 +8,9 @@ import json
 # ==================================
 # CONFIGURAÇÃO DA IA (GEMINI)
 # ==================================
-# Insira sua chave da API abaixo entre as aspas
-API_KEY = "AIzaSySeuCodigoDeChaveRealAqui..."
-
 try:
-    if API_KEY != "SUA_CHAVE_API_AQUI":
-        genai.configure(api_key=API_KEY)
-    else:
-        genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", ""))
-    
+    # Puxa a chave de forma segura dos segredos do Streamlit
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
     model = None
