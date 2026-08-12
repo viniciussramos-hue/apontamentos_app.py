@@ -8,36 +8,22 @@ st.set_page_config(
 
 st.title("📊 Painel de Apontamentos e Indicadores")
 
-# ==========================================
-# UPLOAD E CARREGAMENTO DO ARQUIVO EXCEL
-# ==========================================
-uploaded_file = st.sidebar.file_uploader(
-    "Carregar Planilha Excel (.xlsx)", type=["xlsx"]
-)
+# Caminho fixo do arquivo no repositório local
+CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
-if uploaded_file is not None:
-  # Lendo as abas disponíveis no arquivo para garantir que pegamos a aba certa
-  excel_file = pd.ExcelFile(uploaded_file)
-  abas_disponiveis = excel_file.sheet_names
 
-  # Seleção da aba (com foco padrão na aba 'Apontamentos' ou 'Apontamentos_Detalhado')
-  aba_selecionada = st.sidebar.selectbox(
-      "Selecione a Aba",
-      options=abas_disponiveis,
-      index=(
-          abas_disponiveis.index("Apontamentos")
-          if "Apontamentos" in abas_disponiveis
-          else 0
-      ),
+@st.cache_data
+def carregar_dados():
+  # Utiliza o motor 'pyxlsb' para ler arquivos binários do Excel (.xlsb)
+  # Lê diretamente a aba 'Apontamentos'
+  df = pd.read_excel(
+      CAMINHO_ARQUIVO, sheet_name="Apontamentos", engine="pyxlsb"
   )
+  return df
 
 
-  @st.cache_data
-  def carregar_dados_excel(file, sheet_name):
-    return pd.read_excel(file, sheet_name=sheet_name)
-
-
-  df = carregar_dados_excel(uploaded_file, aba_selecionada)
+try:
+  df = carregar_dados()
 
   # Garantir formato de data se a coluna existir
   if "Data" in df.columns:
@@ -77,7 +63,7 @@ if uploaded_file is not None:
   # 4. Filtro de Centro de Trabalho (CT)
   col_ct = "CT" if "CT" in df.columns else None
   ct_disponiveis = df[col_ct].dropna().unique().tolist() if col_ct else []
-  filtro_ct = st.sidebar.multiselect("Centro de Trabalho (CT)", options=ct_ct_disponiveis)
+  filtro_ct = st.sidebar.multiselect("Centro de Trabalho (CT)", options=ct_disponiveis)
 
   # 5. Filtro de Descrição CT / Descrição
   col_desc = (
@@ -128,14 +114,11 @@ if uploaded_file is not None:
   # EXIBIÇÃO DA TABELA NA TELA PRINCIPAL
   # ==========================================
   st.subheader(
-      f"📋 Dados da Aba: `{aba_selecionada}` (Registros exibidos:"
+      f"📋 Dados da Aba: `Apontamentos` (Registros exibidos:"
       f" {len(df_filtrado)} de {len(df)})"
   )
 
   st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
-else:
-  st.info(
-      "📂 Por favor, faça o upload da planilha Excel na barra lateral para"
-      " carregar os dados da aba de apontamentos."
-  )
+except Exception as e:
+  st.error(f"Erro ao carregar o arquivo local: {e}")
