@@ -12,7 +12,6 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
 @st.cache_data
 def carregar_dados():
-  # Tenta ler o arquivo e exibe o erro exato caso falhe
   df = pd.read_excel(
       CAMINHO_ARQUIVO, sheet_name="Apontamentos", engine="pyxlsb"
   )
@@ -28,82 +27,34 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    st.markdown("### 🎛️ Filtros Rápidos")
+    # ==========================================
+    # BARRA LATERAL COM FILTROS PARA TODAS AS COLUNAS
+    # ==========================================
+    st.sidebar.header("🔍 Filtros por Coluna")
 
-    col_desc = next(
-        (
-            c
-            for c in ["Descrição de Atividade", "Descrição", "Descricao"]
-            if c in df.columns
-        ),
-        None,
-    )
-    col_grupo = next(
-        (c for c in ["Grupo de Paradas", "Grupo"] if c in df.columns), None
-    )
-    col_maq = next(
-        (c for c in ["Máquina", "Máq.", "Maq"] if c in df.columns), None
-    )
-    col_turno = next((c for c in ["Turno", "T"] if c in df.columns), None)
-    col_ct = "CT" if "CT" in df.columns else None
+    filtros = {}
 
-    top_col1, top_col2, top_col3 = st.columns([2, 2, 1])
-
-    with top_col1:
-      desc_opcoes = (
-          df[col_desc].dropna().unique().tolist()
-          if col_desc and col_desc in df.columns
-          else []
-      )
-      filtro_desc_rapido = st.multiselect(
-          "Filtrar por Descrição da Atividade", options=desc_opcoes
-      )
-
-    with top_col2:
-      grupo_opcoes = (
-          df[col_grupo].dropna().unique().tolist()
-          if col_grupo and col_grupo in df.columns
-          else []
-      )
-      filtro_grupo_rapido = st.multiselect(
-          "Filtrar por Grupo", options=grupo_opcoes
-      )
-
-    with top_col3:
-      turno_opcoes = (
-          df[col_turno].dropna().unique().tolist()
-          if col_turno and col_turno in df.columns
-          else []
-      )
-      filtro_turno_rapido = st.multiselect("Turno", options=turno_opcoes)
-
-    st.sidebar.header("🔍 Filtros Adicionais")
-
+    # 1. Filtro de Data (Especial por período)
     if "Data" in df.columns and not df["Data"].dropna().empty:
       min_date = df["Data"].min().date()
       max_date = df["Data"].max().date()
       filtro_data = st.sidebar.date_input(
-          "Período (Data)", value=(min_date, max_date), format="DD/MM/YYYY"
+          "Data", value=(min_date, max_date), format="DD/MM/YYYY"
       )
     else:
       filtro_data = None
 
-    maquinas_disponiveis = (
-        df[col_maq].dropna().unique().tolist()
-        if col_maq and col_maq in df.columns
-        else []
-    )
-    filtro_maq = st.sidebar.multiselect("Máquinas", options=maquinas_disponiveis)
+    # 2. Filtros Multiselect para todas as demais colunas presentes na aba
+    colunas_excluir = ["Data"]
+    for col in df.columns:
+      if col not in colunas_excluir:
+        opcoes = df[col].dropna().unique().tolist()
+        # Limita visualmente a quantidade de opções se forem muitas, mas mantém funcional
+        filtros[col] = st.sidebar.multiselect(f"{col}", options=opcoes)
 
-    ct_disponiveis = (
-        df[col_ct].dropna().unique().tolist()
-        if col_ct and col_ct in df.columns
-        else []
-    )
-    filtro_ct = st.sidebar.multiselect(
-        "Centro de Trabalho (CT)", options=ct_disponiveis
-    )
-
+    # ==========================================
+    # APLICAÇÃO DOS FILTROS
+    # ==========================================
     df_filtrado = df.copy()
 
     if filtro_data and len(filtro_data) == 2 and "Data" in df.columns:
@@ -113,33 +64,20 @@ try:
           & (df_filtrado["Data"].dt.date <= end_date)
       ]
 
-    if filtro_desc_rapido and col_desc and col_desc in df_filtrado.columns:
-      df_filtrado = df_filtrado[df_filtrado[col_desc].isin(filtro_desc_rapido)]
+    for col, selecao in filtros.items():
+      if selecao:
+        df_filtrado = df_filtrado[df_filtrado[col].isin(selecao)]
 
-    if filtro_grupo_rapido and col_grupo and col_grupo in df_filtrado.columns:
-      df_filtrado = df_filtrado[df_filtrado[col_grupo].isin(filtro_grupo_rapido)]
-
-    if filtro_turno_rapido and col_turno and col_turno in df_filtrado.columns:
-      df_filtrado = df_filtrado[
-          df_filtrado[col_turno].isin(filtro_turno_rapido)
-      ]
-
-    if filtro_maq and col_maq and col_maq in df_filtrado.columns:
-      df_filtrado = df_filtrado[df_filtrado[col_maq].isin(filtro_maq)]
-
-    if filtro_ct and col_ct and col_ct in df_filtrado.columns:
-      df_filtrado = df_filtrado[df_filtrado[col_ct].isin(filtro_ct)]
-
+    # ==========================================
+    # EXIBIÇÃO DA TABELA COM OS TÍTULOS EXATOS
+    # ==========================================
     st.markdown("---")
     st.subheader(
         f"📋 Apontamentos Detalhados (Exibindo {len(df_filtrado)} de"
         f" {len(df)} registros)"
     )
+
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-  st.error(f"❌ Erro detalhado ao rodar o aplicativo: {e}")
-  st.info(
-      "Dica: Certifique-se de que o pacote 'pyxlsb' está adicionado no arquivo"
-      " requirements.txt no seu GitHub."
-  )
+  st.error(f"❌ Erro ao processar os dados: {e}")
