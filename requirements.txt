@@ -6,3 +6,4 @@ openai
 google-genai
 google-generativeai
 pyxlsb
+openpyxl
