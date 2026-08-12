@@ -6,11 +6,21 @@ if menu == "📝 Registrar Apontamento":
     # Inicializa variáveis de estado para os campos se não existirem
     if "form_data" not in st.session_state:
         st.session_state.form_data = {
-            "turno": "", "maquina": "", "responsavel": "", "op": "", 
-            "qtd_op": 0.0, "cod_desenho": "", "cod_maxion": "", 
-            "operacao": "", "inicio": "05:00", "fim": "05:50", 
-            "batidas": 0.0, "pcas_boas": 0.0, "sucata": 0.0, 
-            "etiqueta": "", "motivo": ""
+            "turno": "",
+            "maquina": "",
+            "responsavel": "",
+            "op": "",
+            "qtd_op": 0.0,
+            "cod_desenho": "",
+            "cod_maxion": "",
+            "operacao": "",
+            "inicio": "05:00",
+            "fim": "05:50",
+            "batidas": 0.0,
+            "pcas_boas": 0.0,
+            "sucata": 0.0,
+            "etiqueta": "",
+            "motivo": ""
         }
 
     # Upload da foto do apontamento físico
@@ -24,13 +34,11 @@ if menu == "📝 Registrar Apontamento":
                 try:
                     import openai
                     import base64
+                    import json
                     
-                    # Converte a imagem para base64 para enviar à IA
                     bytes_imagem = foto_apontamento.getvalue()
                     base64_imagem = base64.b64encode(bytes_imagem).decode('utf-8')
                     
-                    # Configuração da chamada de visão (Certifique-se de ter sua chave configurada no st.secrets ou ambiente)
-                    # Exemplo utilizando a API da OpenAI compatível com GPT-4o
                     client = openai.OpenAI(api_key=st.secrets.get("OPENAI_API_KEY", "SUA_CHAVE_AQUI"))
                     
                     resposta = client.chat.completions.create(
@@ -49,12 +57,10 @@ if menu == "📝 Registrar Apontamento":
                             }
                         ],
                         response_format={"type": "json_object"}
-                    }
+                    )
                     
-                    import json
                     dados_extraidos = json.loads(resposta.choices[0].message.content)
                     
-                    # Atualiza o estado com os dados lidos
                     st.session_state.form_data = {
                         "turno": dados_extraidos.get("turno", ""),
                         "maquina": dados_extraidos.get("maquina", ""),
@@ -75,9 +81,9 @@ if menu == "📝 Registrar Apontamento":
                     st.success("✨ Dados extraídos e preenchidos automaticamente com sucesso!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Erro ao processar a imagem com IA: {e}. Verifique se a chave da API está configurada.")
+                    st.error(f"Erro ao processar a imagem com IA: {e}.")
 
-    # Formulário preenchido (com os dados automáticos ou manuais)
+    # Formulário preenchido com os dados (automáticos ou manuais)
     d = st.session_state.form_data
     with st.form("form_apontamento"):
         col1, col2, col3, col4 = st.columns(4)
