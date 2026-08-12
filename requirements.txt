@@ -3,3 +3,4 @@ pandas
 plotly
 pdfplumber
 openai
+google-genai
