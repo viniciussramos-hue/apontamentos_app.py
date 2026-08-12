@@ -18,7 +18,6 @@ st.set_page_config(
 conn = sqlite3.connect("apontamentos_fabrica.db", check_same_thread=False)
 c = conn.cursor()
 
-# Criacao das tabelas essenciais com todos os campos de volume e horas
 c.execute("""
     CREATE TABLE IF NOT EXISTS paradas_mestre (
         codigo INTEGER PRIMARY KEY,
@@ -51,11 +50,11 @@ c.execute("""
 """)
 conn.commit()
 
-# --- CARREGA DADOS MESTRES DE PARADA ---
 def popular_paradas_iniciais():
     count = c.execute("SELECT COUNT(*) FROM paradas_mestre").fetchone()[0]
     if count == 0:
         dados_iniciais = [
+            (0, "Sem Parada / Produzindo Normal", "Processos"),
             (7011, "Limpeza - (Sucatas, Batoques, Plasticos e Oleo)", "Processos"),
             (7016, "Inspecao por frequencia", "Processos"),
             (7091, "Lixando Pcs", "Processos"),
@@ -90,16 +89,27 @@ menu = st.sidebar.radio(
 
 # --- SEÇÃO 1: REGISTRAR APONTAMENTO ---
 if menu == "Registrar Apontamento":
-    st.subheader("Novo Apontamento (Fisico / Digital com OCR Inteligente)")
-    st.write("Envie a foto do relatório preenchido. A IA extrairá o cabeçalho e todas as linhas de apontamento com horários e volumes automaticamente.")
+    st.subheader("Relatorio de Auto Apontamento - PM/OTS (Digital e Editavel)")
+    st.write("Envie a foto do relatorio preenchido para carregar os dados no formato da planilha física, permitindo revisar, deletar e salvar.")
+
+    if "linhas_temp" not in st.session_state:
+        st.session_state.linhas_temp = []
+    if "cab_turno" not in st.session_state:
+        st.session_state.cab_turno = ""
+    if "cab_maquina" not in st.session_state:
+        st.session_state.cab_maquina = ""
+    if "cab_data" not in st.session_state:
+        st.session_state.cab_data = date.today()
+    if "cab_resp" not in st.session_state:
+        st.session_state.cab_resp = ""
 
     foto_apontamento = st.file_uploader("Enviar Foto do Relatorio Preenchido", type=["jpg", "jpeg", "png"])
     
     if foto_apontamento:
         st.image(foto_apontamento, caption="Foto do Apontamento Fisico Anexada", width=400)
         
-        if st.button("Ler Relatorio e Salvar Todas as Linhas Automaticamente", use_container_width=True):
-            with st.spinner("Analisando a foto e extraindo todos os apontamentos..."):
+        if st.button("🤖 Ler Relatorio com IA (Substituir Lote Atual)", use_container_width=True):
+            with st.spinner("Analisando a foto e estruturando no formato da planilha..."):
                 try:
                     bytes_imagem = foto_apontamento.getvalue()
                     base64_imagem = base64.b64encode(bytes_imagem).decode('utf-8')
@@ -109,9 +119,8 @@ if menu == "Registrar Apontamento":
                     client = openai.OpenAI(api_key=k1 + k2)
                     
                     prompt_sistema = """
-                    Você é um especialista em extração de dados de relatórios fabris manuscritos.
-                    Retorne estritamente um objeto JSON contendo o cabeçalho e uma lista de linhas (itens).
-                    Estrutura exata do JSON:
+                    Extraia dados de relatório de auto apontamento fabril.
+                    Retorne estritamente um JSON com:
                     {
                       "turno": "",
                       "maquina": "",
@@ -119,19 +128,9 @@ if menu == "Registrar Apontamento":
                       "responsavel": "",
                       "linhas": [
                         {
-                          "op": "",
-                          "qtd_op": 0.0,
-                          "codigo_desenho": "",
-                          "codigo_maxion": "",
-                          "operacao": "",
-                          "codigo_parada": 0,
-                          "hora_inicio": "HH:MM",
-                          "hora_fim": "HH:MM",
-                          "num_batidas": 0.0,
-                          "pcas_boas": 0.0,
-                          "sucata": 0.0,
-                          "num_etiqueta": "",
-                          "motivo": ""
+                          "op": "", "qtd_op": 0.0, "codigo_desenho": "", "codigo_maxion": "",
+                          "operacao": "", "codigo_parada": 0, "hora_inicio": "HH:MM", "hora_fim": "HH:MM",
+                          "num_batidas": 0.0, "pcas_boas": 0.0, "sucata": 0.0, "num_etiqueta": "", "motivo": ""
                         }
                       ]
                     }
@@ -148,85 +147,114 @@ if menu == "Registrar Apontamento":
                     
                     resultado = json.loads(resposta.choices[0].message.content)
                     
-                    cab_turno = resultado.get("turno", "")
-                    cab_maquina = resultado.get("maquina", "")
-                    cab_data = resultado.get("data", str(date.today()))
-                    cab_resp = resultado.get("responsavel", "")
-                    linhas = resultado.get("linhas", [])
+                    st.session_state.cab_turno = resultado.get("turno", "")
+                    st.session_state.cab_maquina = resultado.get("maquina", "")
+                    try:
+                        st.session_state.cab_data = datetime.strptime(resultado.get("data", str(date.today())), "%Y-%m-%d").date()
+                    except:
+                        st.session_state.cab_data = date.today()
+                    st.session_state.cab_resp = resultado.get("responsavel", "")
                     
-                    inseridos = 0
-                    for item in linhas:
-                        c.execute("""
-                            INSERT INTO apontamentos (turno, maquina, data_apontamento, responsavel, op, qtd_op, codigo_desenho, codigo_maxion, operacao, codigo_parada, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            cab_turno, cab_maquina, cab_data, cab_resp,
-                            item.get("op", ""), float(item.get("qtd_op", 0.0) or 0.0),
-                            item.get("codigo_desenho", ""), item.get("codigo_maxion", ""),
-                            item.get("operacao", ""), int(item.get("codigo_parada", 0) or 0),
-                            item.get("hora_inicio", "05:00"), item.get("hora_fim", "05:50"),
-                            float(item.get("num_batidas", 0.0) or 0.0),
-                            float(item.get("pcas_boas", 0.0) or 0.0),
-                            float(item.get("sucata", 0.0) or 0.0),
-                            item.get("num_etiqueta", ""), item.get("motivo", "")
-                        ))
-                        inseridos += 1
-                    
-                    conn.commit()
-                    st.success(f"Sucesso! {inseridos} linha(s) de apontamento extraída(s) e salva(s) com todas as horas e volumes.")
+                    # Substitui completamente o lote anterior para não acumular lixo
+                    st.session_state.linhas_temp = resultado.get("linhas", [])
+                    st.success("Leitura concluída! Dados carregados na tabela abaixo.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Erro ao processar imagem com IA: {e}")
+                    st.error(f"Erro ao processar imagem: {e}")
 
-    # Formulário manual tradicional (caso queira preencher avulso)
-    with st.form("form_apontamento"):
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            turno = st.text_input("Turno")
-            op = st.text_input("O.P.")
-        with col2:
-            maquina = st.text_input("Maquina")
-            qtd_op = st.number_input("Qtd O.P.", step=1.0)
-        with col3:
-            data_ap = st.date_input("Data", value=date.today())
-            cod_desenho = st.text_input("Codigo Desenho")
-        with col4:
-            responsavel = st.text_input("Responsavel")
-            cod_maxion = st.text_input("Codigo Maxion")
+    # Cabeçalho da Planilha
+    st.markdown("---")
+    col_c1, col_c2, col_c3, col_c4 = st.columns(4)
+    with col_c1:
+        st.session_state.cab_turno = st.text_input("Turno:", value=st.session_state.cab_turno)
+    with col_c2:
+        st.session_state.cab_maquina = st.text_input("Máquina:", value=st.session_state.cab_maquina)
+    with col_c3:
+        st.session_state.cab_data = st.date_input("Data:", value=st.session_state.cab_data)
+    with col_c4:
+        st.session_state.cab_resp = st.text_input("Nome do Resp. pelo Preenchimento:", value=st.session_state.cab_resp)
 
-        col_op1, col_op2, col_op3, col_op4 = st.columns(4)
-        with col_op1:
-            operacao = st.text_input("Operacao (Ex: 20/20)")
-        with col_op2:
-            df_paradas = pd.read_sql("SELECT codigo, descricao FROM paradas_mestre", conn)
-            lista_paradas = [f"{row.codigo} - {row.descricao}" for _, row in df_paradas.iterrows()]
-            parada_sel = st.selectbox("Codigo Paradas", lista_paradas)
-            cod_parada = int(parada_sel.split(" - ")[0])
-        with col_op3:
-            h_inicio = st.text_input("Inicio", value="05:00")
-        with col_op4:
-            h_fim = st.text_input("Fim", value="05:50")
+    st.markdown("### Linhas de Apontamento (Formato Planilha)")
 
-        col_pr1, col_pr2, col_pr3, col_pr4 = st.columns(4)
-        with col_pr1:
-            n_batidas = st.number_input("N Batidas", step=1.0)
-        with col_pr2:
-            p_boas = st.number_input("Pcs Boas", step=1.0)
-        with col_pr3:
-            sucata = st.number_input("Sucata", step=1.0)
-        with col_pr4:
-            etiqueta = st.text_input("N Etiqueta")
+    if st.button("➕ Adicionar Nova Linha em Branco"):
+        st.session_state.linhas_temp.append({
+            "op": "", "qtd_op": 0.0, "codigo_desenho": "", "codigo_maxion": "",
+            "operacao": "", "codigo_parada": 0, "hora_inicio": "05:00", "hora_fim": "05:50",
+            "num_batidas": 0.0, "pcas_boas": 0.0, "sucata": 0.0, "num_etiqueta": "", "motivo": ""
+        })
+        st.rerun()
 
-        motivo = st.text_area("Motivo da Parada")
+    # Renderiza as linhas em formato de tabela editável / com opção de exclusão
+    if len(st.session_state.linhas_temp) > 0:
+        indices_para_remover = []
+        
+        for idx, linha in enumerate(st.session_state.linhas_temp):
+            with st.container():
+                st.markdown(f"**Linha {idx + 1}**")
+                lc1, lc2, lc3, lc4, lc5, lc6, lc7, lc8, lc9, lc10, lc11, lc12, lc13 = st.columns([1.2, 1, 1.2, 1.2, 1, 1, 1, 1, 1, 1, 1, 1, 1.5])
+                
+                with lc1:
+                    st.session_state.linhas_temp[idx]["op"] = st.text_input("O.P.", value=linha.get("op",""), key=f"op_{idx}")
+                with lc2:
+                    st.session_state.linhas_temp[idx]["qtd_op"] = st.number_input("Qtd O.P.", value=float(linha.get("qtd_op",0.0) or 0.0), step=1.0, key=f"qop_{idx}")
+                with lc3:
+                    st.session_state.linhas_temp[idx]["codigo_desenho"] = st.text_input("Cód. Desenho", value=linha.get("codigo_desenho",""), key=f"cdes_{idx}")
+                with lc4:
+                    st.session_state.linhas_temp[idx]["codigo_maxion"] = st.text_input("Cód. Maxion", value=linha.get("codigo_maxion",""), key=f"cmax_{idx}")
+                with lc5:
+                    st.session_state.linhas_temp[idx]["operacao"] = st.text_input("Operação", value=linha.get("operacao",""), key=f"oper_{idx}")
+                with lc6:
+                    st.session_state.linhas_temp[idx]["codigo_parada"] = st.number_input("Cód Parada", value=int(linha.get("codigo_parada",0) or 0), step=1, key=f"cpar_{idx}")
+                with lc7:
+                    st.session_state.linhas_temp[idx]["hora_inicio"] = st.text_input("Início", value=linha.get("hora_inicio","05:00"), key=f"hin_{idx}")
+                with lc8:
+                    st.session_state.linhas_temp[idx]["hora_fim"] = st.text_input("Fim", value=linha.get("hora_fim","05:50"), key=f"hfi_{idx}")
+                with lc9:
+                    st.session_state.linhas_temp[idx]["num_batidas"] = st.number_input("Nº Bat", value=float(linha.get("num_batidas",0.0) or 0.0), step=1.0, key=f"nbat_{idx}")
+                with lc10:
+                    st.session_state.linhas_temp[idx]["pcas_boas"] = st.number_input("Pçs Boas", value=float(linha.get("pcas_boas",0.0) or 0.0), step=1.0, key=f"pboa_{idx}")
+                with lc11:
+                    st.session_state.linhas_temp[idx]["sucata"] = st.number_input("Sucata", value=float(linha.get("sucata",0.0) or 0.0), step=1.0, key=f"psuc_{idx}")
+                with lc12:
+                    st.session_state.linhas_temp[idx]["num_etiqueta"] = st.text_input("Nº Etq", value=str(linha.get("num_etiqueta","")), key=f"netq_{idx}")
+                with lc13:
+                    st.session_state.linhas_temp[idx]["motivo"] = st.text_input("Motivo", value=linha.get("motivo",""), key=f"mot_{idx}")
+                
+                if st.button("🗑️ Deletar Linha", key=f"del_{idx}"):
+                    indices_para_remover.append(idx)
+                st.markdown("---")
 
-        btn_salvar = st.form_submit_button("Salvar Apontamento Manual", use_container_width=True)
-        if btn_salvar:
-            c.execute("""
-                INSERT INTO apontamentos (turno, maquina, data_apontamento, responsavel, op, qtd_op, codigo_desenho, codigo_maxion, operacao, codigo_parada, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (turno, maquina, data_ap.strftime("%Y-%m-%d"), responsavel, op, qtd_op, cod_desenho, cod_maxion, operacao, cod_parada, h_inicio, h_fim, n_batidas, p_boas, sucata, etiqueta, motivo))
+        # Remove as linhas marcadas para exclusão
+        if indices_para_remover:
+            for i in sorted(indices_para_remover, reverse=True):
+                st.session_state.linhas_temp.pop(i)
+            st.rerun()
+
+        if st.button("💾 Salvar Lote Definitivo no Banco de Dados", use_container_width=True, type="primary"):
+            salvos = 0
+            for item in st.session_state.linhas_temp:
+                c.execute("""
+                    INSERT INTO apontamentos (turno, maquina, data_apontamento, responsavel, op, qtd_op, codigo_desenho, codigo_maxion, operacao, codigo_parada, hora_inicio, hora_fim, num_batidas, pcas_boas, sucata, num_etiqueta, motivo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    st.session_state.cab_turno, st.session_state.cab_maquina, 
+                    str(st.session_state.cab_data), st.session_state.cab_resp,
+                    item.get("op", ""), float(item.get("qtd_op", 0.0) or 0.0),
+                    item.get("codigo_desenho", ""), item.get("codigo_maxion", ""),
+                    item.get("operacao", ""), int(item.get("codigo_parada", 0) or 0),
+                    item.get("hora_inicio", "05:00"), item.get("hora_fim", "05:50"),
+                    float(item.get("num_batidas", 0.0) or 0.0),
+                    float(item.get("pcas_boas", 0.0) or 0.0),
+                    float(item.get("sucata", 0.0) or 0.0),
+                    str(item.get("num_etiqueta", "")), item.get("motivo", "")
+                ))
+                salvos += 1
             conn.commit()
-            st.success("Apontamento manual salvo com sucesso!")
+            st.success(f"Lote salvo com sucesso! {salvos} registro(s) gravados.")
+            st.session_state.linhas_temp = []
+            st.rerun()
+    else:
+        st.info("Nenhuma linha carregada no momento. Envie uma foto ou clique em 'Adicionar Nova Linha em Branco'.")
 
 # --- SEÇÃO 2: PAINEL DE APONTAMENTOS & HORAS ---
 elif menu == "Painel de Apontamentos & Horas":
@@ -243,8 +271,8 @@ elif menu == "Painel de Apontamentos & Horas":
     if not df_apont.empty:
         def calcular_horas(row):
             try:
-                t1 = datetime.strptime(row["hora_inicio"], "%H:%M")
-                t2 = datetime.strptime(row["hora_fim"], "%H:%M")
+                t1 = datetime.strptime(str(row["hora_inicio"]).strip(), "%H:%M")
+                t2 = datetime.strptime(str(row["hora_fim"]).strip(), "%H:%M")
                 diff = (t2 - t1).total_seconds() / 3600
                 return round(diff, 2)
             except:
@@ -258,7 +286,7 @@ elif menu == "Painel de Apontamentos & Horas":
 # --- SEÇÃO 3: TOTAIS DE PEÇAS PRONTAS ---
 elif menu == "Totais de Pecas Prontas":
     st.subheader("Somatorio e Controle de Pecas Prontas")
-    st.write("Considera apenas operacoes finalizadas (onde o numerador e igual ao denominador, ex: 20/20, 10/10).")
+    st.write("Considera apenas operacoes finalizadas (ex: 20/20, 10/10).")
 
     df_pecas = pd.read_sql("SELECT * FROM apontamentos", conn)
 
@@ -291,6 +319,6 @@ elif menu == "Totais de Pecas Prontas":
             df_agrupado = df_prontas_filtradas.groupby(["codigo_maxion", "codigo_desenho", "operacao"])[["pcas_boas", "sucata"]].sum().reset_index()
             st.dataframe(df_agrupado, use_container_width=True, hide_index=True)
         else:
-            st.warning("Nenhuma peca pronta identificada com operacao concluida (ex: 20/20) nos registros atuais.")
+            st.warning("Nenhuma peca pronta identificada com operacao concluida nos registros atuais.")
     else:
         st.info("Nenhum dado disponivel para calculo de pecas.")
