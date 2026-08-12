@@ -8,8 +8,17 @@ import json
 # ==================================
 # CONFIGURAÇÃO DA IA (GEMINI)
 # ==================================
+# COLE SUA CHAVE API DO GEMINI AQUI ENTRE AS ASPAS:
+# Exemplo: API_KEY = "AIzaSy..."
+API_KEY = "SUA_CHAVE_API_AQUI" 
+
 try:
-    genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", "SUA_CHAVE_API_AQUI"))
+    if API_KEY != "SUA_CHAVE_API_AQUI":
+        genai.configure(api_key=API_KEY)
+    else:
+        # Tenta pegar dos segredos do Streamlit se não colocar direto
+        genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", ""))
+    
     model = genai.GenerativeModel("gemini-2.5-flash")
 except Exception as e:
     model = None
@@ -76,7 +85,7 @@ else:
 if imagem_pil is not None:
     st.image(imagem_pil, caption="Imagem selecionada", use_container_width=True)
 
-    if model is not None:
+    if model is not None and API_KEY != "SUA_CHAVE_API_AQUI":
         if st.button("🚀 Processar e Salvar Apontamento com IA", use_container_width=True):
             with st.spinner("Analisando imagem e calculando eficiência..."):
                 try:
@@ -96,94 +105,4 @@ if imagem_pil is not None:
                     if "```json" in texto_resposta:
                         texto_resposta = texto_resposta.split("```json")[1].split("```")[0].strip()
                     elif "```" in texto_resposta:
-                        texto_resposta = texto_resposta.split("```")[1].split("```")[0].strip()
-
-                    dados_ia = json.loads(texto_resposta)
-                    
-                    codigo = str(dados_ia.get("codigo", "0"))
-                    h_ini_str = dados_ia.get("hora_inicio", "08:00")
-                    h_fim_str = dados_ia.get("hora_fim", "09:00")
-                    duracao_esperada = float(dados_ia.get("duracao_esperada", 60.0))
-                    
-                    partes_ini = h_ini_str.split(":")
-                    partes_fim = h_fim_str.split(":")
-                    
-                    inicio_min = int(partes_ini[0]) * 60 + int(partes_ini[1])
-                    fim_min = int(partes_fim[0]) * 60 + int(partes_fim[1])
-
-                    if fim_min <= inicio_min:
-                        fim_min += 1440
-
-                    duracao_real = fim_min - inicio_min
-                    
-                    if duracao_real > 0:
-                        eficiencia = (duracao_esperada / duracao_real) * 100
-                        
-                        conn.execute(
-                            """
-                            INSERT INTO apontamentos
-                            (codigo, hora_inicio, hora_fim, duracao_esperada, duracao_real, eficiencia)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                            """,
-                            (codigo, h_ini_str, h_fim_str, duracao_esperada, duracao_real, eficiencia)
-                        )
-                        conn.commit()
-                        
-                        st.success(f"✅ Apontamento salvo com sucesso! Código: {codigo} | Início: {h_ini_str} | Fim: {h_fim_str} | Eficiência: {eficiencia:.2f}%")
-                        st.rerun()
-                    else:
-                        st.error("A hora de término calculada é anterior ou igual à de início. Verifique a imagem.")
-
-                except Exception as e:
-                    st.error(f"Erro ao processar a imagem com a IA: {e}")
-    else:
-        st.warning("⚠️ Chave de API do Gemini não configurada.")
-
-# ==================================
-# HISTÓRICO & EXCLUSÃO
-# ==================================
-
-st.markdown("---")
-st.subheader("📋 Histórico de Apontamentos Realizados")
-
-df = pd.read_sql_query(
-    "SELECT * FROM apontamentos ORDER BY id DESC",
-    conn
-)
-
-st.dataframe(
-    df,
-    use_container_width=True
-)
-
-if not df.empty:
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric(
-            "Total de Registros",
-            len(df)
-        )
-
-    with col2:
-        st.metric(
-            "Eficiência Média",
-            f"{df['eficiencia'].mean():.2f}%"
-        )
-
-    st.markdown("---")
-    st.subheader("🗑️ Gerenciar Registros")
-    
-    col_del1, col_del2 = st.columns([2, 1])
-    
-    with col_del1:
-        id_para_excluir = st.selectbox("Selecione o ID do apontamento para excluir:", df["id"].tolist())
-    
-    with col_del2:
-        st.write("") 
-        st.write("")
-        if st.button("🗑️ Deletar Registro Selecionado", use_container_width=True):
-            conn.execute("DELETE FROM apontamentos WHERE id = ?", (id_para_excluir,))
-            conn.commit()
-            st.success(f"Registro ID {id_para_excluir} excluído com sucesso!")
-            st.rerun()
+                        texto_resposta = texto_resposta.split("
