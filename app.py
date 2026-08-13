@@ -22,10 +22,13 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
 @st.cache_data
 def carregar_dados():
-  # Leitura direta do arquivo local otimizada para .xlsb
-  df = pd.read_excel(
-      CAMINHO_ARQUIVO, sheet_name="Apontamentos", engine="pyxlsb"
-  )
+  # Carrega todas as abas para inspecionar e garantir a leitura correta
+  xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
+  abas = xl.sheet_names
+
+  # Seleciona a aba 'Apontamentos' ou a primeira disponível
+  aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
+  df = xl.parse(aba_alvo)
 
   # Remove espaços em branco nas pontas dos nomes das colunas
   df.columns = df.columns.astype(str).str.strip()
@@ -67,6 +70,7 @@ try:
         "Eficiência",
     ]
 
+    # Garante que todas as colunas estejam visíveis na tabela (trazendo as desejadas primeiro e o restante depois)
     colunas_presentes = [c for c in colunas_desejadas if c in df.columns]
     for c in df.columns:
       if c not in colunas_presentes:
@@ -74,7 +78,7 @@ try:
 
     df_exibicao = df[colunas_presentes].copy()
 
-    # Mapeamento seguro para os 7 filtros
+    # Mapeamento seguro para os 7 filtros exatos solicitados
     col_data = "Data" if "Data" in df.columns else None
     col_desc_ct = "Descrição" if "Descrição" in df.columns else None
     col_turno = "T" if "T" in df.columns else None
@@ -120,8 +124,7 @@ try:
 
     filtro_desc_sidebar = (
         st.sidebar.multiselect(
-            "Descrição CT (Adicional)",
-            options=df[col_desc_ct].dropna().unique().tolist(),
+            "Descrição CT", options=df[col_desc_ct].dropna().unique().tolist()
         )
         if col_desc_ct
         else []
@@ -150,8 +153,7 @@ try:
     )
     filtro_grupo_sidebar = (
         st.sidebar.multiselect(
-            "Grupo (Adicional)",
-            options=df[col_grupo].dropna().unique().tolist(),
+            "Grupo", options=df[col_grupo].dropna().unique().tolist()
         )
         if col_grupo
         else []
@@ -236,7 +238,7 @@ try:
       st.metric(label="Eficiência Média", value="Calculada por Registro")
 
     # ==========================================
-    # EXIBIÇÃO DA TABELA COMPLETA COM AS 20 COLUNAS
+    # EXIBIÇÃO DA TABELA COMPLETA COM TODAS AS COLUNAS
     # ==========================================
     st.markdown("---")
     st.subheader("📋 Detalhamento dos Apontamentos")
@@ -244,6 +246,7 @@ try:
 
 except Exception as e:
   st.error(
-      f"❌ Erro ao carregar o arquivo .xlsb. Detalhes técnicos: {e}. Certifique-se"
-      " de que 'pyxlsb' está listado no seu requirements.txt."
+      f"❌ Erro crítico ao processar o arquivo. Detalhes: {e}. Verifique se a"
+      " aba 'Apontamentos' existe no arquivo e se a biblioteca 'pyxlsb' está"
+      " instalada."
   )
