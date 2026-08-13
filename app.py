@@ -22,12 +22,10 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
 @st.cache_data
 def carregar_dados():
-  # Lê a aba de apontamentos
   df = pd.read_excel(
       CAMINHO_ARQUIVO, sheet_name="Apontamentos", engine="pyxlsb"
   )
-
-  # Limpa espaços nas pontas dos nomes das colunas
+  # Remove espaços nas pontas dos nomes das colunas
   df.columns = df.columns.astype(str).str.strip()
 
   if "Data" in df.columns:
@@ -35,7 +33,6 @@ def carregar_dados():
       df["Data"] = pd.to_datetime(df["Data"], unit="D", origin="1899-12-30")
     else:
       df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-
   return df
 
 
@@ -43,11 +40,8 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # Se por acaso os nomes das colunas estiverem mapeados de outra forma, exibe todas as colunas disponíveis para garantia
-    st.sidebar.info(f"Colunas detectadas no arquivo: {len(df.columns)}")
-
-    # Lista exata dos títulos solicitados
-    titulos_desejados = [
+    # Lista EXATA de todas as colunas que você precisa na ordem certa
+    colunas_desejadas = [
         "CT",
         "CT Item",
         "Data",
@@ -70,47 +64,30 @@ try:
         "Eficiência",
     ]
 
-    # Pega exatamente as colunas que batem com os títulos desejados
-    colunas_presentes = [
-        c for c in titulos_desejados if c in df.columns
-    ] or list(df.columns)
+    # Diagnóstico visual rápido na barra lateral para ver se o nome bate com a planilha
+    st.sidebar.success(f"Total de colunas no Excel: {len(df.columns)}")
+
+    # Filtra apenas as colunas que existem na planilha para evitar erros
+    colunas_presentes = [c for c in colunas_desejadas if c in df.columns]
+
+    # Se faltou alguma por diferença de digitação, adiciona as demais para não sumir nada
+    for c in df.columns:
+      if c not in colunas_presentes:
+        colunas_presentes.append(c)
+
     df_exibicao = df[colunas_presentes].copy()
 
-    # Mapeamento para os 7 filtros
+    # Mapeamento robusto para os 7 filtros
     col_data = "Data" if "Data" in df.columns else None
-    col_desc_ct = (
-        "Descrição"
-        if "Descrição" in df.columns
-        else (df.columns[10] if len(df.columns) > 10 else None)
-    )
-    col_turno = (
-        "T"
-        if "T" in df.columns
-        else (df.columns[7] if len(df.columns) > 7 else None)
-    )
-    col_maq = (
-        "Máq."
-        if "Máq." in df.columns
-        else (df.columns[6] if len(df.columns) > 6 else None)
-    )
-    col_ct = (
-        "CT"
-        if "CT" in df.columns
-        else (df.columns[0] if len(df.columns) > 0 else None)
-    )
-    col_grupo = (
-        "Grupo"
-        if "Grupo" in df.columns
-        else (df.columns[9] if len(df.columns) > 9 else None)
-    )
-    col_atividade = (
-        "S/N"
-        if "S/N" in df.columns
-        else (df.columns[8] if len(df.columns) > 8 else None)
-    )
+    col_desc_ct = "Descrição" if "Descrição" in df.columns else None
+    col_turno = "T" if "T" in df.columns else None
+    col_maq = "Máq." if "Máq." in df.columns else None
+    col_ct = "CT" if "CT" in df.columns else None
+    col_grupo = "Grupo" if "Grupo" in df.columns else None
+    col_atividade = "S/N" if "S/N" in df.columns else None
 
     # ==========================================
-    # TOPO: FILTROS SUPERIORES (Slicers)
+    # TOPO: SLICERS DE SEGMENTAÇÃO RÁPIDA
     # ==========================================
     st.title("🏭 Painel Executivo de Apontamentos")
     st.markdown("### 🎛️ Filtros de Segmentação Rápida")
@@ -248,7 +225,9 @@ try:
           axis=1,
       )
 
-    # Indicadores
+    # ==========================================
+    # MÉTRICAS E INDICADORES (SUBTOTAIS)
+    # ==========================================
     c1, c2, c3, c4 = st.columns(4)
     with c1:
       st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
@@ -259,7 +238,9 @@ try:
     with c4:
       st.metric(label="Eficiência Média", value="Calculada por Registro")
 
-    # Exibição da Tabela Completa
+    # ==========================================
+    # EXIBIÇÃO DA TABELA COMPLETA COM BARRA DE ROLAGEM
+    # ==========================================
     st.markdown("---")
     st.subheader("📋 Detalhamento dos Apontamentos")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
