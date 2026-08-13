@@ -1,9 +1,10 @@
+import google.generativeai as genai
 import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="Painel de Apontamentos Industriais",
-    page_icon="🏭",
+    page_title="Painel de Apontamentos e Inteligência Artificial",
+    page_icon="🤖",
     layout="wide",
 )
 
@@ -22,15 +23,11 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
 @st.cache_data
 def carregar_dados():
-  # Carrega todas as abas para inspecionar e garantir a leitura correta
   xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
   abas = xl.sheet_names
-
-  # Seleciona a aba 'Apontamentos' ou a primeira disponível
   aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
   df = xl.parse(aba_alvo)
 
-  # Remove espaços em branco nas pontas dos nomes das colunas
   df.columns = df.columns.astype(str).str.strip()
 
   if "Data" in df.columns:
@@ -46,7 +43,6 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # Lista exata das 20 colunas na ordem desejada
     colunas_desejadas = [
         "CT",
         "CT Item",
@@ -70,7 +66,6 @@ try:
         "Eficiência",
     ]
 
-    # Garante que todas as colunas estejam visíveis na tabela (trazendo as desejadas primeiro e o restante depois)
     colunas_presentes = [c for c in colunas_desejadas if c in df.columns]
     for c in df.columns:
       if c not in colunas_presentes:
@@ -78,7 +73,6 @@ try:
 
     df_exibicao = df[colunas_presentes].copy()
 
-    # Mapeamento seguro para os 7 filtros exatos solicitados
     col_data = "Data" if "Data" in df.columns else None
     col_desc_ct = "Descrição" if "Descrição" in df.columns else None
     col_turno = "T" if "T" in df.columns else None
@@ -90,7 +84,7 @@ try:
     # ==========================================
     # TOPO: SLICERS DE SEGMENTAÇÃO RÁPIDA
     # ==========================================
-    st.title("🏭 Painel Executivo de Apontamentos")
+    st.title("🏭 Painel Executivo de Apontamentos com IA")
     st.markdown("### 🎛️ Filtros de Segmentação Rápida")
     top_col1, top_col2 = st.columns(2)
 
@@ -133,7 +127,7 @@ try:
         st.sidebar.multiselect(
             "Turno (T)", options=df[col_turno].dropna().unique().tolist()
         )
-        if col_turno
+        if filtro_turno
         else []
     )
     filtro_maq = (
@@ -213,7 +207,6 @@ try:
           df_filtrado[col_atividade].isin(filtro_atividade)
       ]
 
-    # Recálculo dinâmico da Eficiência
     if "Eficiência" in df_filtrado.columns and "Qtd." in df_filtrado.columns and "QtPrevista." in df_filtrado.columns:
       df_filtrado["Eficiência"] = df_filtrado.apply(
           lambda r: (
@@ -238,15 +231,64 @@ try:
       st.metric(label="Eficiência Média", value="Calculada por Registro")
 
     # ==========================================
-    # EXIBIÇÃO DA TABELA COMPLETA COM TODAS AS COLUNAS
+    # EXIBIÇÃO DA TABELA COMPLETA
     # ==========================================
     st.markdown("---")
     st.subheader("📋 Detalhamento dos Apontamentos")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
+    # ==========================================
+    # INTERAÇÃO COM I.A. (GEMINI API) NO FINAL DO CÓDIGO
+    # ==========================================
+    st.markdown("---")
+    st.subheader("🤖 Assistente de Inteligência Artificial (Gemini)")
+    st.markdown(
+        "Faça perguntas, analise gargalos ou peça insights sobre os dados"
+        " filtrados atualmente no painel:"
+    )
+
+    # Configuração da chave de API utilizando o Secrets do Streamlit configurado no print
+    api_key = st.secrets.get("GEMINI_API_KEY", None)
+
+    if api_key:
+      genai.configure(api_key=api_key)
+      prompt_usuario = st.text_input(
+          "Exemplo: Quais os principais motivos de parada nos dados filtrados?"
+          " ou Resuma a eficiência geral:"
+      )
+
+      if st.button("Enviar para a IA"):
+        if prompt_usuario:
+          with st.spinner(
+              "Analisando os dados filtrados com Inteligência Artificial..."
+          ):
+            try:
+              # Resumo compacto dos dados filtrados para enviar à IA
+              resumo_dados = df_filtrado.head(100).to_string(index=False)
+              prompt_completo = f"""
+                            Com base nos seguintes dados de apontamentos fabris filtrados pelo usuário:
+                            {resumo_dados}
+                            
+                            Responda à seguinte pergunta ou solicitação de forma objetiva e em português:
+                            {prompt_usuario}
+                            """
+
+              model = genai.GenerativeModel("gemini-1.5-flash")
+              response = model.generate_content(prompt_completo)
+
+              st.success("Resposta da IA:")
+              st.write(response.text)
+            except Exception as e:
+              st.error(f"Erro ao comunicar com a API do Gemini: {e}")
+        else:
+          st.warning("Por favor, digite uma pergunta antes de enviar.")
+    else:
+      st.info(
+          "⚠️ Para habilitar a assistente de IA, adicione a sua chave"
+          " `GEMINI_API_KEY` na seção **Secrets** das configurações do seu app"
+          " no Streamlit Cloud (conforme a imagem de configuração que você"
+          " enviou)."
+      )
+
 except Exception as e:
-  st.error(
-      f"❌ Erro crítico ao processar o arquivo. Detalhes: {e}. Verifique se a"
-      " aba 'Apontamentos' existe no arquivo e se a biblioteca 'pyxlsb' está"
-      " instalada."
-  )
+  st.error(f"❌ Erro crítico ao processar o arquivo: {e}")
