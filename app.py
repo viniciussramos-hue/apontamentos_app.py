@@ -5,7 +5,6 @@ st.set_page_config(
     page_title="Painel de Apontamentos Industriais",
     page_icon="🏭",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 st.markdown(
@@ -23,18 +22,20 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
 @st.cache_data
 def carregar_dados():
+  # Lê a aba de apontamentos
   df = pd.read_excel(
       CAMINHO_ARQUIVO, sheet_name="Apontamentos", engine="pyxlsb"
   )
 
-  # Remove espaços extras dos nomes das colunas para evitar conflitos
-  df.columns = df.columns.str.strip()
+  # Limpa espaços nas pontas dos nomes das colunas
+  df.columns = df.columns.astype(str).str.strip()
 
   if "Data" in df.columns:
     if pd.api.types.is_numeric_dtype(df["Data"]):
       df["Data"] = pd.to_datetime(df["Data"], unit="D", origin="1899-12-30")
     else:
       df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
   return df
 
 
@@ -42,8 +43,11 @@ try:
   df = carregar_dados()
 
   if not df.empty:
-    # 20 colunas exatas da sua imagem
-    titulos_exatos = [
+    # Se por acaso os nomes das colunas estiverem mapeados de outra forma, exibe todas as colunas disponíveis para garantia
+    st.sidebar.info(f"Colunas detectadas no arquivo: {len(df.columns)}")
+
+    # Lista exata dos títulos solicitados
+    titulos_desejados = [
         "CT",
         "CT Item",
         "Data",
@@ -66,21 +70,47 @@ try:
         "Eficiência",
     ]
 
-    # Garante que apenas as colunas existentes sejam puxadas sem perder nenhuma
-    colunas_presentes = [c for c in titulos_exatos if c in df.columns]
+    # Pega exatamente as colunas que batem com os títulos desejados
+    colunas_presentes = [
+        c for c in titulos_desejados if c in df.columns
+    ] or list(df.columns)
     df_exibicao = df[colunas_presentes].copy()
 
-    # Mapeamento seguro para os 7 filtros essenciais
+    # Mapeamento para os 7 filtros
     col_data = "Data" if "Data" in df.columns else None
-    col_desc_ct = "Descrição" if "Descrição" in df.columns else None
-    col_turno = "T" if "T" in df.columns else None
-    col_maq = "Máq." if "Máq." in df.columns else None
-    col_ct = "CT" if "CT" in df.columns else None
-    col_grupo = "Grupo" if "Grupo" in df.columns else None
-    col_atividade = "S/N" if "S/N" in df.columns else None
+    col_desc_ct = (
+        "Descrição"
+        if "Descrição" in df.columns
+        else (df.columns[10] if len(df.columns) > 10 else None)
+    )
+    col_turno = (
+        "T"
+        if "T" in df.columns
+        else (df.columns[7] if len(df.columns) > 7 else None)
+    )
+    col_maq = (
+        "Máq."
+        if "Máq." in df.columns
+        else (df.columns[6] if len(df.columns) > 6 else None)
+    )
+    col_ct = (
+        "CT"
+        if "CT" in df.columns
+        else (df.columns[0] if len(df.columns) > 0 else None)
+    )
+    col_grupo = (
+        "Grupo"
+        if "Grupo" in df.columns
+        else (df.columns[9] if len(df.columns) > 9 else None)
+    )
+    col_atividade = (
+        "S/N"
+        if "S/N" in df.columns
+        else (df.columns[8] if len(df.columns) > 8 else None)
+    )
 
     # ==========================================
-    # TOPO: SLICERS RÁPIDOS
+    # TOPO: FILTROS SUPERIORES (Slicers)
     # ==========================================
     st.title("🏭 Painel Executivo de Apontamentos")
     st.markdown("### 🎛️ Filtros de Segmentação Rápida")
@@ -122,7 +152,6 @@ try:
         if col_desc_ct
         else []
     )
-
     filtro_turno = (
         st.sidebar.multiselect(
             "Turno (T)", options=df[col_turno].dropna().unique().tolist()
@@ -130,7 +159,6 @@ try:
         if col_turno
         else []
     )
-
     filtro_maq = (
         st.sidebar.multiselect(
             "Máquina (Máq.)", options=df[col_maq].dropna().unique().tolist()
@@ -138,7 +166,6 @@ try:
         if col_maq
         else []
     )
-
     filtro_ct = (
         st.sidebar.multiselect(
             "Centro de Trabalho (CT)",
@@ -147,7 +174,6 @@ try:
         if col_ct
         else []
     )
-
     filtro_grupo_sidebar = (
         st.sidebar.multiselect(
             "Grupo (Adicional)",
@@ -156,7 +182,6 @@ try:
         if col_grupo
         else []
     )
-
     filtro_atividade = (
         st.sidebar.multiselect(
             "Atividade (S/N)",
@@ -212,12 +237,8 @@ try:
           df_filtrado[col_atividade].isin(filtro_atividade)
       ]
 
-    # Recálculo dinâmico da Eficiência
-    if (
-        "Eficiência" in df_filtrado.columns
-        and "Qtd." in df_filtrado.columns
-        and "QtPrevista." in df_filtrado.columns
-    ):
+    # Recálculo da Eficiência
+    if "Eficiência" in df_filtrado.columns and "Qtd." in df_filtrado.columns and "QtPrevista." in df_filtrado.columns:
       df_filtrado["Eficiência"] = df_filtrado.apply(
           lambda r: (
               f"{(r['Qtd.'] / r['QtPrevista.']) * 100:.1f}%"
@@ -227,31 +248,18 @@ try:
           axis=1,
       )
 
-    # ==========================================
-    # MÉTRICAS E INDICADORES
-    # ==========================================
+    # Indicadores
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-      st.metric(
-          label="Total de Registros",
-          value=f"{len(df_filtrado):,}".replace(",", "."),
-      )
+      st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
     with c2:
-      st.metric(
-          label="Horas Apontadas",
-          value=f"{(len(df_filtrado) * 0.5):,.1f}h".replace(",", "."),
-      )
+      st.metric(label="Horas Apontadas", value=f"{(len(df_filtrado) * 0.5):,.1f}h")
     with c3:
-      st.metric(
-          label="Duração Total",
-          value=f"{len(df_filtrado):,}".replace(",", "."),
-      )
+      st.metric(label="Duração Total", value=f"{len(df_filtrado):,}")
     with c4:
       st.metric(label="Eficiência Média", value="Calculada por Registro")
 
-    # ==========================================
-    # TABELA FINAL COM TODAS AS COLUNAS
-    # ==========================================
+    # Exibição da Tabela Completa
     st.markdown("---")
     st.subheader("📋 Detalhamento dos Apontamentos")
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
