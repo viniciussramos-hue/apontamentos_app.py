@@ -24,45 +24,52 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 st.title("📋 Relatório de Auto Apontamento - PM/OTS")
 st.markdown("---")
 
-# Barra lateral para upload da planilha
 st.sidebar.header("📂 Fonte de Dados")
-arquivo_carregado = st.sidebar.file_uploader("Envie o arquivo (.xlsb)", type=["xlsb", "xlsx"])
+arquivo_carregado = st.sidebar.file_uploader("Envie a planilha (.xlsb ou .xlsx)", type=["xlsb", "xlsx"])
 
 @st.cache_data
 def carregar_dados(uploaded_file):
-    if uploaded_file is not None:
-        try:
-            return pd.read_excel(uploaded_file, engine="pyxlsb" if uploaded_file.name.endswith(".xlsb") else "openpyxl")
-        except Exception:
-            return pd.read_excel(uploaded_file)
-    elif os.path.exists(CAMINHO_ARQUIVO):
-        try:
-            xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
-            abas = xl.sheet_names
-            aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
-            return xl.parse(aba_alvo)
-        except Exception:
-            pass
-    
-    # DataFrame de exemplo caso o arquivo não seja encontrado, evitando a tela de erro
-    return pd.DataFrame({
-        "CT": ["CT01", "CT02"],
-        "CT Item": ["12345", "12346"],
-        "Data": [pd.Timestamp.today(), pd.Timestamp.today()],
-        "Hora Início": ["05:00", "06:00"],
-        "Hora Fim": ["06:00", "07:00"],
-        "Máq.": ["C2076", "C2077"],
-        "T": ["1º", "2º"],
-        "Grupo": ["Setup", "Processos"],
-        "Descrição": ["Normal", "Parada"],
-        "Material": ["30004430302", "5087292755"],
-        "Descrição do PN": ["Travessa", "Suporte"],
-        "S/N": ["20/20", "10/20"],
-        "Qtd.": [400, 250]
-    })
+    try:
+        if uploaded_file is not None:
+            if uploaded_file.name.endswith(".xlsb"):
+                xl = pd.ExcelFile(uploaded_file, engine="pyxlsb")
+            else:
+                xl = pd.ExcelFile(uploaded_file, engine="openpyxl")
+        else:
+            if os.path.exists(CAMINHO_ARQUIVO):
+                xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
+            else:
+                # Retorna dados simulados caso o arquivo não exista no repositório ainda
+                return pd.DataFrame({
+                    "CT": ["CT01", "CT02"],
+                    "CT Item": ["12345", "12346"],
+                    "Data": [pd.Timestamp.today(), pd.Timestamp.today()],
+                    "Hora Início": ["05:00", "06:00"],
+                    "Hora Fim": ["06:00", "07:00"],
+                    "Máq.": ["C2076", "C2077"],
+                    "T": ["1º", "2º"],
+                    "Grupo": ["Setup", "Processos"],
+                    "Descrição": ["Normal", "Parada"],
+                    "Material": ["30004430302", "5087292755"],
+                    "Descrição do PN": ["Travessa", "Suporte"],
+                    "S/N": ["20/20", "10/20"],
+                    "Qtd.": [400, 250]
+                })
+        
+        abas = xl.sheet_names
+        aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
+        return xl.parse(aba_alvo)
+    except Exception as e:
+        st.error(f"Erro detalhado ao ler o arquivo: {e}")
+        return pd.DataFrame()
 
 try:
     df = carregar_dados(arquivo_carregado)
+    
+    if df.empty:
+        st.warning("⚠️ O DataFrame carregado está vazio. Verifique o arquivo enviado.")
+        st.stop()
+
     df.columns = df.columns.astype(str).str.strip()
 
     if "Máq." in df.columns:
@@ -164,4 +171,4 @@ try:
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-    st.error(f"❌ Ocorreu um erro ao carregar o painel: {e}")
+    st.error(f"❌ Erro crítico ao processar o aplicativo: {e}")
