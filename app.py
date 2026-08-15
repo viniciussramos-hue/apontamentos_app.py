@@ -30,6 +30,11 @@ def carregar_dados():
 
     df.columns = df.columns.astype(str).str.strip()
 
+    # Tratamento seguro da coluna Máquina para evitar falhas no filtro
+    if "Máq." in df.columns:
+        df["Máq."] = df["Máq."].astype(str).str.strip()
+        df = df[df["Máq."] != "nan"]
+
     if "Data" in df.columns:
         if pd.api.types.is_numeric_dtype(df["Data"]):
             df["Data"] = pd.to_datetime(df["Data"], unit="D", origin="1899-12-30")
@@ -51,12 +56,12 @@ try:
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
 
     with col_h1:
-        turnos_disp = df["T"].dropna().unique().tolist() if "T" in df.columns else ["1º", "2º", "3º"]
+        turnos_disp = sorted(df["T"].dropna().astype(str).unique().tolist()) if "T" in df.columns else ["1º", "2º", "3º"]
         filtro_turno = st.selectbox("Turno:", options=turnos_disp)
 
     with col_h2:
-        maqs_disp = df["Máq."].dropna().unique().tolist() if "Máq." in df.columns else []
-        filtro_maq = st.selectbox("Máquina:", options=maqs_disp)
+        maqs_disp = sorted(df["Máq."].dropna().unique().tolist()) if "Máq." in df.columns else []
+        filtro_maq = st.selectbox("Máquina:", options=maqs_disp) if maqs_disp else "Nenhuma máquina encontrada"
 
     with col_h3:
         filtro_data_cab = st.date_input("Data:", value=date.today())
@@ -72,12 +77,12 @@ try:
     st.sidebar.header("🔍 Filtros Avançados")
     
     filtro_desc_sidebar = (
-        st.sidebar.multiselect("Descrição CT", options=df["Descrição"].dropna().unique().tolist())
+        st.sidebar.multiselect("Descrição CT", options=df["Descrição"].dropna().astype(str).unique().tolist())
         if "Descrição" in df.columns
         else []
     )
     filtro_grupo_sidebar = (
-        st.sidebar.multiselect("Grupo", options=df["Grupo"].dropna().unique().tolist())
+        st.sidebar.multiselect("Grupo", options=df["Grupo"].dropna().astype(str).unique().tolist())
         if "Grupo" in df.columns
         else []
     )
@@ -88,16 +93,16 @@ try:
     df_filtrado = df.copy()
 
     if filtro_turno and "T" in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado["T"] == filtro_turno]
+        df_filtrado = df_filtrado[df_filtrado["T"].astype(str) == str(filtro_turno)]
 
-    if filtro_maq and "Máq." in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado["Máq."] == filtro_maq]
+    if filtro_maq and filtro_maq != "Nenhuma máquina encontrada" and "Máq." in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Máq."] == str(filtro_maq)]
 
     if filtro_desc_sidebar and "Descrição" in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado["Descrição"].isin(filtro_desc_sidebar)]
+        df_filtrado = df_filtrado[df_filtrado["Descrição"].astype(str).isin(filtro_desc_sidebar)]
 
     if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado["Grupo"].isin(filtro_grupo_sidebar)]
+        df_filtrado = df_filtrado[df_filtrado["Grupo"].astype(str).isin(filtro_grupo_sidebar)]
 
     # Mapeamento para a grade no formato do relatório físico
     df_exibicao = pd.DataFrame()
@@ -116,7 +121,7 @@ try:
     df_exibicao["Motivo / Problemas"] = df_filtrado["Descrição"] if "Descrição" in df_filtrado.columns else ""
 
     # ==========================================
-    # ABAS DO PAINEL (Apenas Grade e Painel de Horas)
+    # ABAS DO PAINEL
     # ==========================================
     aba1, aba2 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status"])
 
