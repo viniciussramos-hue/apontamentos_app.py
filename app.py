@@ -1,10 +1,11 @@
+from datetime import date, datetime
 import google.generativeai as genai
 import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="Painel de Apontamentos e Inteligência Artificial",
-    page_icon="🤖",
+    page_title="Relatorio de Auto Apontamento - PM/OTS",
+    page_icon="📋",
     layout="wide",
 )
 
@@ -23,272 +24,173 @@ CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
 @st.cache_data
 def carregar_dados():
-  xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
-  abas = xl.sheet_names
-  aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
-  df = xl.parse(aba_alvo)
+    xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
+    abas = xl.sheet_names
+    aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
+    df = xl.parse(aba_alvo)
 
-  df.columns = df.columns.astype(str).str.strip()
+    df.columns = df.columns.astype(str).str.strip()
 
-  if "Data" in df.columns:
-    if pd.api.types.is_numeric_dtype(df["Data"]):
-      df["Data"] = pd.to_datetime(df["Data"], unit="D", origin="1899-12-30")
-    else:
-      df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+    if "Data" in df.columns:
+        if pd.api.types.is_numeric_dtype(df["Data"]):
+            df["Data"] = pd.to_datetime(df["Data"], unit="D", origin="1899-12-30")
+        else:
+            df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
 
-  return df
+    return df
 
 
 try:
-  df = carregar_dados()
+    df = carregar_dados()
 
-  if not df.empty:
-    colunas_desejadas = [
-        "CT",
-        "CT Item",
-        "Data",
-        "Hora Início",
-        "Hora Fim",
-        "Duração",
-        "Máq.",
-        "T",
-        "S/N",
-        "Grupo",
-        "Descrição",
-        "Material",
-        "Descrição do PN",
-        "Conjugado",
-        "Qtd.",
-        "Std PN",
-        "Tempo_Std.",
-        "QtPrevista.",
-        "Nº Operadores.",
-        "Eficiência",
-    ]
-
-    colunas_presentes = [c for c in colunas_desejadas if c in df.columns]
-    for c in df.columns:
-      if c not in colunas_presentes:
-        colunas_presentes.append(c)
-
-    df_exibicao = df[colunas_presentes].copy()
-
-    col_data = "Data" if "Data" in df.columns else None
-    col_desc_ct = "Descrição" if "Descrição" in df.columns else None
-    col_turno = "T" if "T" in df.columns else None
-    col_maq = "Máq." if "Máq." in df.columns else None
-    col_ct = "CT" if "CT" in df.columns else None
-    col_grupo = "Grupo" if "Grupo" in df.columns else None
-    col_atividade = "S/N" if "S/N" in df.columns else None
+    # Mapeamento e adaptação para o layout PM/OTS
+    st.title("📋 Relatório de Auto Apontamento - PM/OTS")
+    st.markdown("---")
 
     # ==========================================
-    # TOPO: SLICERS DE SEGMENTAÇÃO RÁPIDA
+    # CABEÇALHO DO RELATÓRIO (Layout Físico)
     # ==========================================
-    st.title("🏭 Painel Executivo de Apontamentos com IA")
-    st.markdown("### 🎛️ Filtros de Segmentação Rápida")
-    top_col1, top_col2 = st.columns(2)
+    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
 
-    with top_col1:
-      opc_desc = (
-          df[col_desc_ct].dropna().unique().tolist() if col_desc_ct else []
-      )
-      filtro_desc_top = st.multiselect(
-          "Filtrar por Descrição CT", options=opc_desc
-      )
+    with col_h1:
+        turnos_disp = df["T"].dropna().unique().tolist() if "T" in df.columns else ["1º", "2º", "3º"]
+        filtro_turno = st.selectbox("Turno:", options=turnos_disp)
 
-    with top_col2:
-      opc_grupo = df[col_grupo].dropna().unique().tolist() if col_grupo else []
-      filtro_grupo_top = st.multiselect("Filtrar por Grupo", options=opc_grupo)
+    with col_h2:
+        maqs_disp = df["Máq."].dropna().unique().tolist() if "Máq." in df.columns else []
+        filtro_maq = st.selectbox("Máquina:", options=maqs_disp)
+
+    with col_h3:
+        filtro_data_cab = st.date_input("Data:", value=date.today())
+
+    with col_h4:
+        resp_preenchimento = st.text_input("Nome do Resp. pelo Preenchimento:", value="Operador Turno")
 
     st.markdown("---")
 
     # ==========================================
-    # BARRA LATERAL: OS 7 FILTROS EXATOS
+    # BARRA LATERAL DE FILTROS GLOBAIS
     # ==========================================
-    st.sidebar.header("🔍 Painel de Filtros")
-
-    if col_data and not df[col_data].dropna().empty:
-      min_date = df[col_data].min().date()
-      max_date = df[col_data].max().date()
-      filtro_data = st.sidebar.date_input(
-          "Período (Data)", value=(min_date, max_date), format="DD/MM/YYYY"
-      )
-    else:
-      filtro_data = None
-
+    st.sidebar.header("🔍 Filtros Avançados")
+    
     filtro_desc_sidebar = (
-        st.sidebar.multiselect(
-            "Descrição CT", options=df[col_desc_ct].dropna().unique().tolist()
-        )
-        if col_desc_ct
-        else []
-    )
-    filtro_turno = (
-        st.sidebar.multiselect(
-            "Turno (T)", options=df[col_turno].dropna().unique().tolist()
-        )
-        if filtro_turno
-        else []
-    )
-    filtro_maq = (
-        st.sidebar.multiselect(
-            "Máquina (Máq.)", options=df[col_maq].dropna().unique().tolist()
-        )
-        if col_maq
-        else []
-    )
-    filtro_ct = (
-        st.sidebar.multiselect(
-            "Centro de Trabalho (CT)",
-            options=df[col_ct].dropna().unique().tolist(),
-        )
-        if col_ct
+        st.sidebar.multiselect("Descrição CT", options=df["Descrição"].dropna().unique().tolist())
+        if "Descrição" in df.columns
         else []
     )
     filtro_grupo_sidebar = (
-        st.sidebar.multiselect(
-            "Grupo", options=df[col_grupo].dropna().unique().tolist()
-        )
-        if col_grupo
-        else []
-    )
-    filtro_atividade = (
-        st.sidebar.multiselect(
-            "Atividade (S/N)",
-            options=df[col_atividade].dropna().unique().tolist(),
-        )
-        if col_atividade
+        st.sidebar.multiselect("Grupo", options=df["Grupo"].dropna().unique().tolist())
+        if "Grupo" in df.columns
         else []
     )
 
     # ==========================================
-    # APLICAÇÃO DOS FILTROS
+    # APLICAÇÃO DOS FILTROS NA TABELA
     # ==========================================
-    df_filtrado = df_exibicao.copy()
+    df_filtrado = df.copy()
 
-    if filtro_data and len(filtro_data) == 2 and col_data:
-      start_date, end_date = filtro_data
-      df_filtrado = df_filtrado[
-          (df_filtrado[col_data].dt.date >= start_date)
-          & (df_filtrado[col_data].dt.date <= end_date)
-      ]
+    if filtro_turno and "T" in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["T"] == filtro_turno]
 
-    desc_selecionadas = list(
-        set(
-            (filtro_desc_top if filtro_desc_top else [])
-            + (filtro_desc_sidebar if filtro_desc_sidebar else [])
-        )
-    )
-    if desc_selecionadas and col_desc_ct:
-      df_filtrado = df_filtrado[df_filtrado[col_desc_ct].isin(desc_selecionadas)]
+    if filtro_maq and "Máq." in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Máq."] == filtro_maq]
 
-    grupo_selecionados = list(
-        set(
-            (filtro_grupo_top if filtro_grupo_top else [])
-            + (filtro_grupo_sidebar if filtro_grupo_sidebar else [])
-        )
-    )
-    if grupo_selecionados and col_grupo:
-      df_filtrado = df_filtrado[
-          df_filtrado[col_grupo].isin(grupo_selecionados)
-      ]
+    if filtro_desc_sidebar and "Descrição" in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Descrição"].isin(filtro_desc_sidebar)]
 
-    if filtro_turno and col_turno:
-      df_filtrado = df_filtrado[df_filtrado[col_turno].isin(filtro_turno)]
-
-    if filtro_maq and col_maq:
-      df_filtrado = df_filtrado[df_filtrado[col_maq].isin(filtro_maq)]
-
-    if filtro_ct and col_ct:
-      df_filtrado = df_filtrado[df_filtrado[col_ct].isin(filtro_ct)]
-
-    if filtro_atividade and col_atividade:
-      df_filtrado = df_filtrado[
-          df_filtrado[col_atividade].isin(filtro_atividade)
-      ]
-
-    if "Eficiência" in df_filtrado.columns and "Qtd." in df_filtrado.columns and "QtPrevista." in df_filtrado.columns:
-      df_filtrado["Eficiência"] = df_filtrado.apply(
-          lambda r: (
-              f"{(r['Qtd.'] / r['QtPrevista.']) * 100:.1f}%"
-              if pd.notnull(r["QtPrevista."]) and r["QtPrevista."] > 0
-              else ""
-          ),
-          axis=1,
-      )
+    if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Grupo"].isin(filtro_grupo_sidebar)]
 
     # ==========================================
-    # MÉTRICAS E INDICADORES (SUBTOTAIS)
+    # ORGANIZAÇÃO DAS COLUNAS NO FORMATO DO APONTAMENTO
     # ==========================================
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-      st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
-    with c2:
-      st.metric(label="Horas Apontadas", value=f"{(len(df_filtrado) * 0.5):,.1f}h")
-    with c3:
-      st.metric(label="Duração Total", value=f"{len(df_filtrado):,}")
-    with c4:
-      st.metric(label="Eficiência Média", value="Calculada por Registro")
+    # Garantindo o mapeamento exato das colunas do relatório físico
+    colunas_pmots = {
+        "CT Item": "O.P.",
+        "Qtd.": "Qtd O.P.",
+        "Material": "Código Desenho",
+        "Descrição do PN": "Código Maxion",
+        "S/N": "Operação",
+        "Grupo": "Código Paradas",
+        "Hora Início": "Início",
+        "Hora Fim": "Fim",
+        "Qtd.": "Pçs Boas",
+        "Eficiência": "Motivo"
+    }
+
+    # Seleciona e renomeia colunas se existirem
+    df_exibicao = pd.DataFrame()
+    df_exibicao["O.P."] = df_filtrado["CT Item"] if "CT Item" in df_filtrado.columns else ""
+    df_exibicao["Qtd O.P."] = df_filtrado["Qtd."] if "Qtd." in df_filtrado.columns else 0
+    df_exibicao["Código Desenho"] = df_filtrado["Material"] if "Material" in df_filtrado.columns else ""
+    df_exibicao["Código Maxion"] = df_filtrado["Descrição do PN"] if "Descrição do PN" in df_filtrado.columns else ""
+    df_exibicao["Operação"] = df_filtrado["S/N"] if "S/N" in df_filtrado.columns else ""
+    df_exibicao["Código Paradas"] = df_filtrado["Grupo"] if "Grupo" in df_filtrado.columns else ""
+    df_exibicao["Início"] = df_filtrado["Hora Início"] if "Hora Início" in df_filtrado.columns else ""
+    df_exibicao["Fim"] = df_filtrado["Hora Fim"] if "Hora Fim" in df_filtrado.columns else ""
+    df_exibicao["Nº Bat"] = df_filtrado["Conjugado"] if "Conjugado" in df_filtrado.columns else 0
+    df_exibicao["Pçs Boas"] = df_filtrado["Qtd."] if "Qtd." in df_filtrado.columns else 0
+    df_exibicao["Sucata"] = 0
+    df_exibicao["Nº Etiqueta"] = ""
+    df_exibicao["Motivo / Problemas"] = df_filtrado["Descrição"] if "Descrição" in df_filtrado.columns else ""
 
     # ==========================================
-    # EXIBIÇÃO DA TABELA COMPLETA
+    # ABAS DO PAINEL (Estrutura do Projeto)
     # ==========================================
-    st.markdown("---")
-    st.subheader("📋 Detalhamento dos Apontamentos")
-    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+    aba1, aba2, aba3 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status", "🤖 Assistente IA (Gemini)"])
 
-    # ==========================================
-    # INTERAÇÃO COM I.A. (GEMINI API) NO FINAL DO CÓDIGO
-    # ==========================================
-    st.markdown("---")
-    st.subheader("🤖 Assistente de Inteligência Artificial (Gemini)")
-    st.markdown(
-        "Faça perguntas, analise gargalos ou peça insights sobre os dados"
-        " filtrados atualmente no painel:"
-    )
+    with aba1:
+        st.subheader("Registros e Lançamentos no Formato PM/OTS")
+        st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
 
-    # Configuração da chave de API utilizando o Secrets do Streamlit configurado no print
-    api_key = st.secrets.get("GEMINI_API_KEY", None)
+    with aba2:
+        st.subheader("Painel de Controle e Validação de Horas")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
+        with c2:
+            st.metric(label="Linhas Apontadas", value=f"{len(df_exibicao):,}")
+        with c3:
+            st.metric(label="Volumes Totais", value=f"{df_exibicao['Pçs Boas'].sum():,.0f}")
+        with c4:
+            st.metric(label="Status Turno", value="Ativo")
 
-    if api_key:
-      genai.configure(api_key=api_key)
-      prompt_usuario = st.text_input(
-          "Exemplo: Quais os principais motivos de parada nos dados filtrados?"
-          " ou Resuma a eficiência geral:"
-      )
+        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
-      if st.button("Enviar para a IA"):
-        if prompt_usuario:
-          with st.spinner(
-              "Analisando os dados filtrados com Inteligência Artificial..."
-          ):
-            try:
-              # Resumo compacto dos dados filtrados para enviar à IA
-              resumo_dados = df_filtrado.head(100).to_string(index=False)
-              prompt_completo = f"""
-                            Com base nos seguintes dados de apontamentos fabris filtrados pelo usuário:
+    with aba3:
+        st.subheader("🤖 Assistente de Inteligência Artificial (Gemini)")
+        st.markdown("Faça perguntas ou peça análises de gargalos com base nos dados filtrados:")
+
+        api_key = st.secrets.get("GEMINI_API_KEY", None)
+
+        if api_key:
+            genai.configure(api_key=api_key)
+            prompt_usuario = st.text_input("Exemplo: Quais os principais motivos de parada nos dados filtrados?")
+
+            if st.button("Enviar para a IA"):
+                if prompt_usuario:
+                    with st.spinner("Analisando os dados com Inteligência Artificial..."):
+                        try:
+                            resumo_dados = df_exibicao.head(100).to_string(index=False)
+                            prompt_completo = f"""
+                            Com base nos dados do Relatório PM/OTS filtrados:
                             {resumo_dados}
                             
-                            Responda à seguinte pergunta ou solicitação de forma objetiva e em português:
+                            Responda à solicitação de forma objetiva e em português:
                             {prompt_usuario}
                             """
 
-              model = genai.GenerativeModel("gemini-1.5-flash")
-              response = model.generate_content(prompt_completo)
+                            model = genai.GenerativeModel("gemini-1.5-flash")
+                            response = model.generate_content(prompt_completo)
 
-              st.success("Resposta da IA:")
-              st.write(response.text)
-            except Exception as e:
-              st.error(f"Erro ao comunicar com a API do Gemini: {e}")
+                            st.success("Resposta da IA:")
+                            st.write(response.text)
+                        except Exception as e:
+                            st.error(f"Erro ao comunicar com a API do Gemini: {e}")
+                else:
+                    st.warning("Por favor, digite uma pergunta antes de enviar.")
         else:
-          st.warning("Por favor, digite uma pergunta antes de enviar.")
-    else:
-      st.info(
-          "⚠️ Para habilitar a assistente de IA, adicione a sua chave"
-          " `GEMINI_API_KEY` na seção **Secrets** das configurações do seu app"
-          " no Streamlit Cloud (conforme a imagem de configuração que você"
-          " enviou)."
-      )
+            st.info("⚠️ Adicione a chave `GEMINI_API_KEY` na seção **Secrets** do Streamlit Cloud para habilitar o assistente de IA.")
 
 except Exception as e:
-  st.error(f"❌ Erro crítico ao processar o arquivo: {e}")
+    st.error(f"❌ Erro crítico ao processar o arquivo de apontamentos: {e}")
