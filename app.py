@@ -1,10 +1,9 @@
 from datetime import date, datetime
-import google.generativeai as genai
 import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="Relatorio de Auto Apontamento - PM/OTS",
+    page_title="Relatório de Auto Apontamento - PM/OTS",
     page_icon="📋",
     layout="wide",
 )
@@ -12,8 +11,8 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-        .main { background-color: #f8fafc; }
-        .stMetric { background-color: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #2563eb; }
+        .main { background-color: #0e1117; }
+        .stMetric { background-color: #161b22; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-left: 4px solid #2563eb; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -43,7 +42,6 @@ def carregar_dados():
 try:
     df = carregar_dados()
 
-    # Mapeamento e adaptação para o layout PM/OTS
     st.title("📋 Relatório de Auto Apontamento - PM/OTS")
     st.markdown("---")
 
@@ -101,24 +99,7 @@ try:
     if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado["Grupo"].isin(filtro_grupo_sidebar)]
 
-    # ==========================================
-    # ORGANIZAÇÃO DAS COLUNAS NO FORMATO DO APONTAMENTO
-    # ==========================================
-    # Garantindo o mapeamento exato das colunas do relatório físico
-    colunas_pmots = {
-        "CT Item": "O.P.",
-        "Qtd.": "Qtd O.P.",
-        "Material": "Código Desenho",
-        "Descrição do PN": "Código Maxion",
-        "S/N": "Operação",
-        "Grupo": "Código Paradas",
-        "Hora Início": "Início",
-        "Hora Fim": "Fim",
-        "Qtd.": "Pçs Boas",
-        "Eficiência": "Motivo"
-    }
-
-    # Seleciona e renomeia colunas se existirem
+    # Mapeamento para a grade no formato do relatório físico
     df_exibicao = pd.DataFrame()
     df_exibicao["O.P."] = df_filtrado["CT Item"] if "CT Item" in df_filtrado.columns else ""
     df_exibicao["Qtd O.P."] = df_filtrado["Qtd."] if "Qtd." in df_filtrado.columns else 0
@@ -135,9 +116,9 @@ try:
     df_exibicao["Motivo / Problemas"] = df_filtrado["Descrição"] if "Descrição" in df_filtrado.columns else ""
 
     # ==========================================
-    # ABAS DO PAINEL (Estrutura do Projeto)
+    # ABAS DO PAINEL (Apenas Grade e Painel de Horas)
     # ==========================================
-    aba1, aba2, aba3 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status", "🤖 Assistente IA (Gemini)"])
+    aba1, aba2 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status"])
 
     with aba1:
         st.subheader("Registros e Lançamentos no Formato PM/OTS")
@@ -151,46 +132,13 @@ try:
         with c2:
             st.metric(label="Linhas Apontadas", value=f"{len(df_exibicao):,}")
         with c3:
-            st.metric(label="Volumes Totais", value=f"{df_exibicao['Pçs Boas'].sum():,.0f}")
+            total_pecas = df_exibicao['Pçs Boas'].sum() if 'Pçs Boas' in df_exibicao.columns else 0
+            st.metric(label="Volumes Totais", value=f"{total_pecas:,.0f}")
         with c4:
             st.metric(label="Status Turno", value="Ativo")
 
+        st.markdown("---")
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-
-    with aba3:
-        st.subheader("🤖 Assistente de Inteligência Artificial (Gemini)")
-        st.markdown("Faça perguntas ou peça análises de gargalos com base nos dados filtrados:")
-
-        api_key = st.secrets.get("GEMINI_API_KEY", None)
-
-        if api_key:
-            genai.configure(api_key=api_key)
-            prompt_usuario = st.text_input("Exemplo: Quais os principais motivos de parada nos dados filtrados?")
-
-            if st.button("Enviar para a IA"):
-                if prompt_usuario:
-                    with st.spinner("Analisando os dados com Inteligência Artificial..."):
-                        try:
-                            resumo_dados = df_exibicao.head(100).to_string(index=False)
-                            prompt_completo = f"""
-                            Com base nos dados do Relatório PM/OTS filtrados:
-                            {resumo_dados}
-                            
-                            Responda à solicitação de forma objetiva e em português:
-                            {prompt_usuario}
-                            """
-
-                            model = genai.GenerativeModel("gemini-1.5-flash")
-                            response = model.generate_content(prompt_completo)
-
-                            st.success("Resposta da IA:")
-                            st.write(response.text)
-                        except Exception as e:
-                            st.error(f"Erro ao comunicar com a API do Gemini: {e}")
-                else:
-                    st.warning("Por favor, digite uma pergunta antes de enviar.")
-        else:
-            st.info("⚠️ Adicione a chave `GEMINI_API_KEY` na seção **Secrets** do Streamlit Cloud para habilitar o assistente de IA.")
 
 except Exception as e:
     st.error(f"❌ Erro crítico ao processar o arquivo de apontamentos: {e}")
