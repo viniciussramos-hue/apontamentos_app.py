@@ -1,6 +1,7 @@
 from datetime import date, datetime
 import pandas as pd
 import streamlit as st
+import os
 
 st.set_page_config(
     page_title="Relatório de Auto Apontamento - PM/OTS",
@@ -20,9 +21,11 @@ st.markdown(
 
 CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
-
 @st.cache_data
 def carregar_dados():
+    if not os.path.exists(CAMINHO_ARQUIVO):
+        raise FileNotFoundError(f"O arquivo '{CAMINHO_ARQUIVO}' não foi encontrado no diretório do projeto.")
+    
     xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
     abas = xl.sheet_names
     aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
@@ -30,7 +33,6 @@ def carregar_dados():
 
     df.columns = df.columns.astype(str).str.strip()
 
-    # Tratamento seguro da coluna Máquina para evitar falhas no filtro
     if "Máq." in df.columns:
         df["Máq."] = df["Máq."].astype(str).str.strip()
         df = df[df["Máq."] != "nan"]
@@ -43,7 +45,6 @@ def carregar_dados():
 
     return df
 
-
 try:
     df = carregar_dados()
 
@@ -51,7 +52,7 @@ try:
     st.markdown("---")
 
     # ==========================================
-    # CABEÇALHO DO RELATÓRIO (Layout Físico)
+    # CABEÇALHO DO RELATÓRIO
     # ==========================================
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
 
@@ -72,7 +73,7 @@ try:
     st.markdown("---")
 
     # ==========================================
-    # BARRA LATERAL DE FILTROS GLOBAIS
+    # BARRA LATERAL DE FILTROS
     # ==========================================
     st.sidebar.header("🔍 Filtros Avançados")
     
@@ -88,7 +89,7 @@ try:
     )
 
     # ==========================================
-    # APLICAÇÃO DOS FILTROS NA TABELA
+    # APLICAÇÃO DOS FILTROS
     # ==========================================
     df_filtrado = df.copy()
 
@@ -104,7 +105,7 @@ try:
     if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado["Grupo"].astype(str).isin(filtro_grupo_sidebar)]
 
-    # Mapeamento para a grade no formato do relatório físico
+    # Mapeamento para a grade PM/OTS
     df_exibicao = pd.DataFrame()
     df_exibicao["O.P."] = df_filtrado["CT Item"] if "CT Item" in df_filtrado.columns else ""
     df_exibicao["Qtd O.P."] = df_filtrado["Qtd."] if "Qtd." in df_filtrado.columns else 0
@@ -146,4 +147,5 @@ try:
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-    st.error(f"❌ Erro crítico ao processar o arquivo de apontamentos: {e}")
+    st.error(f"❌ Erro ao executar o aplicativo: {e}")
+    st.info("💡 Dica: Verifique se o arquivo `03-Consultas_Apontamentos_rev02.xlsb` foi enviado para o repositório do GitHub e se a biblioteca `pyxlsb` está listada no seu arquivo `requirements.txt`.")
