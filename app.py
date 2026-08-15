@@ -21,12 +21,21 @@ st.markdown(
 
 CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
 
+st.title("📋 Relatório de Auto Apontamento - PM/OTS")
+st.markdown("---")
+
+# Opção de upload caso o arquivo não esteja no servidor do GitHub
+arquivo_carregado = st.sidebar.file_uploader("📂 Enviar planilha (.xlsb)", type=["xlsb"])
+
 @st.cache_data
-def carregar_dados():
-    if not os.path.exists(CAMINHO_ARQUIVO):
-        raise FileNotFoundError(f"O arquivo '{CAMINHO_ARQUIVO}' não foi encontrado no diretório do projeto.")
+def carregar_dados(uploaded_file):
+    if uploaded_file is not None:
+        xl = pd.ExcelFile(uploaded_file, engine="pyxlsb")
+    else:
+        if not os.path.exists(CAMINHO_ARQUIVO):
+            raise FileNotFoundError(f"O arquivo padrão '{CAMINHO_ARQUIVO}' não foi encontrado no repositório. Faça o upload dele na barra lateral.")
+        xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
     
-    xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
     abas = xl.sheet_names
     aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
     df = xl.parse(aba_alvo)
@@ -46,10 +55,7 @@ def carregar_dados():
     return df
 
 try:
-    df = carregar_dados()
-
-    st.title("📋 Relatório de Auto Apontamento - PM/OTS")
-    st.markdown("---")
+    df = carregar_dados(arquivo_carregado)
 
     # ==========================================
     # CABEÇALHO DO RELATÓRIO
@@ -147,5 +153,6 @@ try:
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
 except Exception as e:
-    st.error(f"❌ Erro ao executar o aplicativo: {e}")
-    st.info("💡 Dica: Verifique se o arquivo `03-Consultas_Apontamentos_rev02.xlsb` foi enviado para o repositório do GitHub e se a biblioteca `pyxlsb` está listada no seu arquivo `requirements.txt`.")
+    # Exibe a mensagem real do erro diretamente na tela para descobrirmos a causa exata
+    st.error(f"❌ Erro detectado no aplicativo: {e}")
+    st.warning("💡 Caso o erro seja de arquivo não encontrado, utilize o botão de upload na barra lateral para enviar o arquivo `.xlsb` diretamente.")
