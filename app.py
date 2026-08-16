@@ -1,6 +1,6 @@
 import streamlit as st
 
-# O set_page_config DEVE ser a primeira instrução absoluta do script
+# DEVE ser a primeira instrução do script
 st.set_page_config(
     page_title="Relatório de Auto Apontamento - PM/OTS",
     page_icon="📋",
@@ -9,7 +9,6 @@ st.set_page_config(
 
 from datetime import date
 import pandas as pd
-import os
 
 st.markdown(
     """
@@ -21,21 +20,22 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsx"
-
 st.title("📋 Relatório de Auto Apontamento - PM/OTS")
 st.markdown("---")
 
 st.sidebar.header("📂 Fonte de Dados")
-arquivo_carregado = st.sidebar.file_uploader("Substituir planilha (.xlsx)", type=["xlsx"])
+arquivo_carregado = st.sidebar.file_uploader("Envie sua planilha (.xlsx)", type=["xlsx"])
 
 @st.cache_data
 def carregar_dados(uploaded_file):
     if uploaded_file is not None:
-        return pd.read_excel(uploaded_file, engine="openpyxl")
-    elif os.path.exists(CAMINHO_ARQUIVO):
-        return pd.read_excel(CAMINHO_ARQUIVO, engine="openpyxl")
+        try:
+            return pd.read_excel(uploaded_file, engine="openpyxl")
+        except Exception as e:
+            st.error(f"Erro ao ler a planilha enviada: {e}")
+            return pd.DataFrame()
     else:
+        # DataFrame de exemplo para a interface abrir antes do upload
         return pd.DataFrame({
             "CT": ["PM05"],
             "CT Item": ["PM04"],
@@ -59,96 +59,93 @@ def carregar_dados(uploaded_file):
             "Eficiência": [""]
         })
 
-try:
-    df = carregar_dados(arquivo_carregado)
+df = carregar_dados(arquivo_carregado)
 
-    if df.empty:
-        st.warning("⚠️ O arquivo carregado está vazio.")
-    else:
-        df.columns = df.columns.astype(str).str.strip()
+if arquivo_carregado is None:
+    st.sidebar.warning("⚠️ Envie o arquivo `.xlsx` na barra lateral para carregar os seus dados reais de apontamento.")
 
-        if "Máq." in df.columns:
-            df["Máq."] = df["Máq."].astype(str).str.strip()
+if not df.empty:
+    df.columns = df.columns.astype(str).str.strip()
 
-        # ==========================================
-        # CABEÇALHO DO RELATÓRIO
-        # ==========================================
-        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+    if "Máq." in df.columns:
+        df["Máq."] = df["Máq."].astype(str).str.strip()
 
-        with col_h1:
-            turnos_disp = sorted(df["T"].dropna().astype(str).unique().tolist()) if "T" in df.columns else ["1", "2", "3"]
-            filtro_turno = st.selectbox("Turno (T):", options=turnos_disp)
+    # ==========================================
+    # CABEÇALHO DO RELATÓRIO
+    # ==========================================
+    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
 
-        with col_h2:
-            maqs_disp = sorted(df["Máq."].dropna().unique().tolist()) if "Máq." in df.columns else []
-            filtro_maq = st.selectbox("Máquina (Máq.):", options=maqs_disp) if maqs_disp else "Nenhuma"
+    with col_h1:
+        turnos_disp = sorted(df["T"].dropna().astype(str).unique().tolist()) if "T" in df.columns else ["1", "2", "3"]
+        filtro_turno = st.selectbox("Turno (T):", options=turnos_disp)
 
-        with col_h3:
-            filtro_data_cab = st.date_input("Data de Referência:", value=date.today())
+    with col_h2:
+        maqs_disp = sorted(df["Máq."].dropna().unique().tolist()) if "Máq." in df.columns else []
+        filtro_maq = st.selectbox("Máquina (Máq.):", options=maqs_disp) if maqs_disp else "Nenhuma"
 
-        with col_h4:
-            resp_preenchimento = st.text_input("Responsável pelo Preenchimento:", value="Operador Turno")
+    with col_h3:
+        filtro_data_cab = st.date_input("Data de Referência:", value=date.today())
+
+    with col_h4:
+        resp_preenchimento = st.text_input("Responsável pelo Preenchimento:", value="Operador Turno")
+
+    st.markdown("---")
+
+    # ==========================================
+    # FILTROS AVANÇADOS (BARRA LATERAL)
+    # ==========================================
+    st.sidebar.header("🔍 Filtros da Planilha")
+    
+    filtro_desc_sidebar = (
+        st.sidebar.multiselect("Descrição CT", options=df["Descrição"].dropna().astype(str).unique().tolist())
+        if "Descrição" in df.columns
+        else []
+    )
+    
+    filtro_grupo_sidebar = (
+        st.sidebar.multiselect("Grupo", options=df["Grupo"].dropna().astype(str).unique().tolist())
+        if "Grupo" in df.columns
+        else []
+    )
+
+    # ==========================================
+    # APLICAÇÃO DOS FILTROS
+    # ==========================================
+    df_filtrado = df.copy()
+
+    if filtro_turno and "T" in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["T"].astype(str) == str(filtro_turno)]
+
+    if filtro_maq and filtro_maq != "Nenhuma" and "Máq." in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Máq."] == str(filtro_maq)]
+
+    if filtro_desc_sidebar and "Descrição" in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Descrição"].astype(str).isin(filtro_desc_sidebar)]
+
+    if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
+        df_filtrado = df_filtrado[df_filtrado["Grupo"].astype(str).isin(filtro_grupo_sidebar)]
+
+    # ==========================================
+    # ABAS DO PAINEL
+    # ==========================================
+    aba1, aba2 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status"])
+
+    with aba1:
+        st.subheader("Registros no Formato Padrão Maxion PM/OTS")
+        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+
+    with aba2:
+        st.subheader("Painel de Controle e Validação de Horas")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
+        with c2:
+            st.metric(label="Linhas Filtradas", value=f"{len(df_filtrado):,}")
+        with c3:
+            total_pecas = df_filtrado['Qtd.'].sum() if 'Qtd.' in df_filtrado.columns else 0
+            st.metric(label="Volumes Totais (Qtd)", value=f"{total_pecas:,.0f}")
+        with c4:
+            st.metric(label="Status do Turno", value="Ativo")
 
         st.markdown("---")
-
-        # ==========================================
-        # FILTROS AVANÇADOS (BARRA LATERAL)
-        # ==========================================
-        st.sidebar.header("🔍 Filtros da Planilha")
-        
-        filtro_desc_sidebar = (
-            st.sidebar.multiselect("Descrição CT", options=df["Descrição"].dropna().astype(str).unique().tolist())
-            if "Descrição" in df.columns
-            else []
-        )
-        
-        filtro_grupo_sidebar = (
-            st.sidebar.multiselect("Grupo", options=df["Grupo"].dropna().astype(str).unique().tolist())
-            if "Grupo" in df.columns
-            else []
-        )
-
-        # ==========================================
-        # APLICAÇÃO DOS FILTROS
-        # ==========================================
-        df_filtrado = df.copy()
-
-        if filtro_turno and "T" in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["T"].astype(str) == str(filtro_turno)]
-
-        if filtro_maq and filtro_maq != "Nenhuma" and "Máq." in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["Máq."] == str(filtro_maq)]
-
-        if filtro_desc_sidebar and "Descrição" in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["Descrição"].astype(str).isin(filtro_desc_sidebar)]
-
-        if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado["Grupo"].astype(str).isin(filtro_grupo_sidebar)]
-
-        # ==========================================
-        # ABAS DO PAINEL
-        # ==========================================
-        aba1, aba2 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status"])
-
-        with aba1:
-            st.subheader("Registros no Formato Padrão Maxion PM/OTS")
-            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-
-        with aba2:
-            st.subheader("Painel de Controle e Validação de Horas")
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
-            with c2:
-                st.metric(label="Linhas Filtradas", value=f"{len(df_filtrado):,}")
-            with c3:
-                total_pecas = df_filtrado['Qtd.'].sum() if 'Qtd.' in df_filtrado.columns else 0
-                st.metric(label="Volumes Totais (Qtd)", value=f"{total_pecas:,.0f}")
-            with c4:
-                st.metric(label="Status do Turno", value="Ativo")
-
-            st.markdown("---")
-            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-
-except Exception as e:
-    st.error(f"❌ Erro detectado ao executar o aplicativo: {e}")
+        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
