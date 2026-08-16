@@ -1,13 +1,15 @@
-from datetime import date
-import pandas as pd
 import streamlit as st
-import os
 
+# O set_page_config DEVE ser a primeira instrução absoluta do script
 st.set_page_config(
     page_title="Relatório de Auto Apontamento - PM/OTS",
     page_icon="📋",
     layout="wide",
 )
+
+from datetime import date
+import pandas as pd
+import os
 
 st.markdown(
     """
@@ -34,28 +36,27 @@ def carregar_dados(uploaded_file):
     elif os.path.exists(CAMINHO_ARQUIVO):
         return pd.read_excel(CAMINHO_ARQUIVO, engine="openpyxl")
     else:
-        # Retorna dados falsos de exemplo para o app abrir caso o arquivo não esteja na pasta ainda
         return pd.DataFrame({
-            "CT": ["PM05", "PM05"],
-            "CT Item": ["PM04", "PM05"],
-            "Data": [pd.Timestamp.today(), pd.Timestamp.today()],
-            "Hora Início": ["00:00:00", "00:10:00"],
-            "Hora Fim": ["00:10:00", "02:10:00"],
-            "Duração": ["-00:10:00", "-02:00:00"],
-            "Máq.": ["C2635", "C2635"],
-            "T": ["3", "3"],
-            "S/N": ["S", "N"],
-            "Grupo": ["ATIVIDADES INTERATIVAS", "PRODUÇÃO"],
-            "Descrição": ["REUNIÃO DDS", "PRODUZINDO"],
-            "Material": ["5087140600EST", "5087140600EST"],
-            "Descrição do PN": ["CHAPA MBB 9793130046", "CHAPA MBB 9793130046"],
-            "Conjugado": ["(vazio)", "(vazio)"],
-            "Qtd.": [0, 630],
-            "Std PN": [240, 240],
-            "Tempo_Std.": ["0:00:00", "2:37:30"],
-            "QtPrevista.": [40, 480],
-            "Nº Operadores.": [4, 4],
-            "Eficiência": ["", "131,3%"]
+            "CT": ["PM05"],
+            "CT Item": ["PM04"],
+            "Data": [pd.Timestamp.today()],
+            "Hora Início": ["00:00:00"],
+            "Hora Fim": ["00:10:00"],
+            "Duração": ["-00:10:00"],
+            "Máq.": ["C2635"],
+            "T": ["3"],
+            "S/N": ["S"],
+            "Grupo": ["ATIVIDADES INTERATIVAS"],
+            "Descrição": ["REUNIÃO DDS"],
+            "Material": ["5087140600EST"],
+            "Descrição do PN": ["CHAPA MBB 9793130046"],
+            "Conjugado": ["(vazio)"],
+            "Qtd.": [0],
+            "Std PN": [240],
+            "Tempo_Std.": ["0:00:00"],
+            "QtPrevista.": [40],
+            "Nº Operadores.": [4],
+            "Eficiência": [""]
         })
 
 try:
@@ -151,4 +152,3 @@ try:
 
 except Exception as e:
     st.error(f"❌ Erro detectado ao executar o aplicativo: {e}")
-    st.info("💡 Dica: Verifique se o arquivo `03-Consultas_Apontamentos_rev02.xlsx` está na raiz do seu repositório no GitHub.")
