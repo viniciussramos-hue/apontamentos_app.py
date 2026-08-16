@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date
 import pandas as pd
 import streamlit as st
 import os
@@ -19,93 +19,73 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsb"
+CAMINHO_ARQUIVO = "03-Consultas_Apontamentos_rev02.xlsx"
 
 st.title("📋 Relatório de Auto Apontamento - PM/OTS")
 st.markdown("---")
 
+# Barra lateral para upload opcional caso queira testar outros arquivos
 st.sidebar.header("📂 Fonte de Dados")
-arquivo_carregado = st.sidebar.file_uploader("Envie a planilha (.xlsb ou .xlsx)", type=["xlsb", "xlsx"])
+arquivo_carregado = st.sidebar.file_uploader("Substituir planilha (.xlsx)", type=["xlsx"])
 
 @st.cache_data
 def carregar_dados(uploaded_file):
     try:
         if uploaded_file is not None:
-            if uploaded_file.name.endswith(".xlsb"):
-                xl = pd.ExcelFile(uploaded_file, engine="pyxlsb")
-            else:
-                xl = pd.ExcelFile(uploaded_file, engine="openpyxl")
+            return pd.read_excel(uploaded_file, engine="openpyxl")
+        elif os.path.exists(CAMINHO_ARQUIVO):
+            return pd.read_excel(CAMINHO_ARQUIVO, engine="openpyxl")
         else:
-            if os.path.exists(CAMINHO_ARQUIVO):
-                xl = pd.ExcelFile(CAMINHO_ARQUIVO, engine="pyxlsb")
-            else:
-                # Retorna dados simulados caso o arquivo não exista no repositório ainda
-                return pd.DataFrame({
-                    "CT": ["CT01", "CT02"],
-                    "CT Item": ["12345", "12346"],
-                    "Data": [pd.Timestamp.today(), pd.Timestamp.today()],
-                    "Hora Início": ["05:00", "06:00"],
-                    "Hora Fim": ["06:00", "07:00"],
-                    "Máq.": ["C2076", "C2077"],
-                    "T": ["1º", "2º"],
-                    "Grupo": ["Setup", "Processos"],
-                    "Descrição": ["Normal", "Parada"],
-                    "Material": ["30004430302", "5087292755"],
-                    "Descrição do PN": ["Travessa", "Suporte"],
-                    "S/N": ["20/20", "10/20"],
-                    "Qtd.": [400, 250]
-                })
-        
-        abas = xl.sheet_names
-        aba_alvo = "Apontamentos" if "Apontamentos" in abas else abas[0]
-        return xl.parse(aba_alvo)
+            return pd.DataFrame()
     except Exception as e:
-        st.error(f"Erro detalhado ao ler o arquivo: {e}")
+        st.error(f"Erro ao ler a planilha: {e}")
         return pd.DataFrame()
 
-try:
-    df = carregar_dados(arquivo_carregado)
-    
-    if df.empty:
-        st.warning("⚠️ O DataFrame carregado está vazio. Verifique o arquivo enviado.")
-        st.stop()
+df = carregar_dados(arquivo_carregado)
 
+if df.empty:
+    st.warning(f"⚠️ O arquivo '{CAMINHO_ARQUIVO}' não foi encontrado na raiz do repositório ou está vazio. Por favor, faça o upload usando a barra lateral.")
+else:
     df.columns = df.columns.astype(str).str.strip()
 
     if "Máq." in df.columns:
         df["Máq."] = df["Máq."].astype(str).str.strip()
 
+    if "Data" in df.columns:
+        df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+
     # ==========================================
-    # CABEÇALHO DO RELATÓRIO
+    # CABEÇALHO DO RELATÓRIO (Layout Maxion)
     # ==========================================
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
 
     with col_h1:
-        turnos_disp = sorted(df["T"].dropna().astype(str).unique().tolist()) if "T" in df.columns else ["1º", "2º", "3º"]
-        filtro_turno = st.selectbox("Turno:", options=turnos_disp)
+        turnos_disp = sorted(df["T"].dropna().astype(str).unique().tolist()) if "T" in df.columns else []
+        filtro_turno = st.selectbox("Turno (T):", options=turnos_disp) if turnos_disp else None
 
     with col_h2:
         maqs_disp = sorted(df["Máq."].dropna().unique().tolist()) if "Máq." in df.columns else []
-        filtro_maq = st.selectbox("Máquina:", options=maqs_disp) if maqs_disp else "Nenhuma máquina encontrada"
+        filtro_maq = st.selectbox("Máquina (Máq.):", options=maqs_disp) if maqs_disp else None
 
     with col_h3:
-        filtro_data_cab = st.date_input("Data:", value=date.today())
+        filtro_data_cab = st.date_input("Data de Referência:", value=date.today())
 
     with col_h4:
-        resp_preenchimento = st.text_input("Nome do Resp. pelo Preenchimento:", value="Operador Turno")
+        resp_preenchimento = st.text_input("Responsável pelo Preenchimento:", value="Operador Turno")
 
     st.markdown("---")
 
     # ==========================================
-    # BARRA LATERAL DE FILTROS
+    # BARRA LATERAL: FILTROS AVANÇADOS (Descrição CT e Grupo)
     # ==========================================
-    st.sidebar.header("🔍 Filtros Avançados")
+    st.sidebar.header("🔍 Filtros da Planilha")
     
     filtro_desc_sidebar = (
         st.sidebar.multiselect("Descrição CT", options=df["Descrição"].dropna().astype(str).unique().tolist())
         if "Descrição" in df.columns
         else []
     )
+    
     filtro_grupo_sidebar = (
         st.sidebar.multiselect("Grupo", options=df["Grupo"].dropna().astype(str).unique().tolist())
         if "Grupo" in df.columns
@@ -120,7 +100,7 @@ try:
     if filtro_turno and "T" in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado["T"].astype(str) == str(filtro_turno)]
 
-    if filtro_maq and filtro_maq != "Nenhuma máquina encontrada" and "Máq." in df_filtrado.columns:
+    if filtro_maq and "Máq." in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado["Máq."] == str(filtro_maq)]
 
     if filtro_desc_sidebar and "Descrição" in df_filtrado.columns:
@@ -129,30 +109,14 @@ try:
     if filtro_grupo_sidebar and "Grupo" in df_filtrado.columns:
         df_filtrado = df_filtrado[df_filtrado["Grupo"].astype(str).isin(filtro_grupo_sidebar)]
 
-    # Mapeamento para a grade PM/OTS
-    df_exibicao = pd.DataFrame()
-    df_exibicao["O.P."] = df_filtrado["CT Item"] if "CT Item" in df_filtrado.columns else ""
-    df_exibicao["Qtd O.P."] = df_filtrado["Qtd."] if "Qtd." in df_filtrado.columns else 0
-    df_exibicao["Código Desenho"] = df_filtrado["Material"] if "Material" in df_filtrado.columns else ""
-    df_exibicao["Código Maxion"] = df_filtrado["Descrição do PN"] if "Descrição do PN" in df_filtrado.columns else ""
-    df_exibicao["Operação"] = df_filtrado["S/N"] if "S/N" in df_filtrado.columns else ""
-    df_exibicao["Código Paradas"] = df_filtrado["Grupo"] if "Grupo" in df_filtrado.columns else ""
-    df_exibicao["Início"] = df_filtrado["Hora Início"] if "Hora Início" in df_filtrado.columns else ""
-    df_exibicao["Fim"] = df_filtrado["Hora Fim"] if "Hora Fim" in df_filtrado.columns else ""
-    df_exibicao["Nº Bat"] = 0
-    df_exibicao["Pçs Boas"] = df_filtrado["Qtd."] if "Qtd." in df_filtrado.columns else 0
-    df_exibicao["Sucata"] = 0
-    df_exibicao["Nº Etiqueta"] = ""
-    df_exibicao["Motivo / Problemas"] = df_filtrado["Descrição"] if "Descrição" in df_filtrado.columns else ""
-
     # ==========================================
-    # ABAS DO PAINEL
+    # ABAS DO PAINEL (Grade e Painel de Horas)
     # ==========================================
     aba1, aba2 = st.tabs(["📝 Grade de Apontamento", "📋 Painel de Horas & Status"])
 
     with aba1:
-        st.subheader("Registros e Lançamentos no Formato PM/OTS")
-        st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
+        st.subheader("Registros no Formato Padrão Maxion PM/OTS")
+        st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
     with aba2:
         st.subheader("Painel de Controle e Validação de Horas")
@@ -160,15 +124,12 @@ try:
         with c1:
             st.metric(label="Total de Registros", value=f"{len(df_filtrado):,}")
         with c2:
-            st.metric(label="Linhas Apontadas", value=f"{len(df_exibicao):,}")
+            st.metric(label="Linhas Filtradas", value=f"{len(df_filtrado):,}")
         with c3:
-            total_pecas = df_exibicao['Pçs Boas'].sum() if 'Pçs Boas' in df_exibicao.columns else 0
-            st.metric(label="Volumes Totais", value=f"{total_pecas:,.0f}")
+            total_pecas = df_filtrado['Qtd.'].sum() if 'Qtd.' in df_filtrado.columns else 0
+            st.metric(label="Volumes Totais (Qtd)", value=f"{total_pecas:,.0f}")
         with c4:
-            st.metric(label="Status Turno", value="Ativo")
+            st.metric(label="Status do Turno", value="Ativo")
 
         st.markdown("---")
         st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-
-except Exception as e:
-    st.error(f"❌ Erro crítico ao processar o aplicativo: {e}")
