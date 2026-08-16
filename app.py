@@ -1,73 +1,40 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
 
-# Configuração da página como Wide (Layout Largo)
-st.set_page_config(page_title="Relatório de Apontamento - Maxion", layout="wide")
+# 1. Configuração de tela larga
+st.set_page_config(page_title="Relatório Maxion", layout="wide")
 
-# Estilização CSS para o layout Maxion (Azul, Branco, Cinza)
+# 2. CSS para compactar o layout
 st.markdown("""
     <style>
-        .stApp { background-color: #f0f2f6; }
-        .stMetric { background-color: #ffffff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 5px; }
-        h1 { color: #004a99; }
-        .stDataFrame { border: 1px solid #004a99; }
+        .block-container { padding-top: 1rem; padding-bottom: 0rem; }
+        .stDataFrame { font-size: 12px; }
     </style>
 """, unsafe_allow_html=True)
 
-# Cabeçalho com logo e título
-col_logo, col_titulo = st.columns([1, 4])
-with col_logo:
-    st.image("https://www.maxionwheels.com/en/assets/images/logo-maxion-wheels.png", width=200)
-with col_titulo:
-    st.title("Relatório de Auto Apontamento")
-    st.caption("Maxion Structural Components - Gestão PM/OTS")
-
-# Upload de dados
-st.sidebar.header("📁 Fonte de Dados")
+# 3. Título alinhado à esquerda e upload
+st.title("📋 Relatório de Auto Apontamento")
 uploaded_file = st.sidebar.file_uploader("Upload da planilha (.xlsx)", type=["xlsx"])
 
-# Função de carga
-@st.cache_data
-def carregar_dados(file):
-    if file:
-        return pd.read_excel(file, engine="openpyxl")
-    return pd.DataFrame()
-
-df = carregar_dados(uploaded_file)
-
-if not df.empty:
-    # Filtros superioress (Estilo Slicers)
-    st.markdown("### Filtros de Seleção")
-    c_f1, c_f2 = st.columns([3, 1])
+if uploaded_file:
+    df = pd.read_excel(uploaded_file, engine="openpyxl")
     
-    with c_f1:
-        desc_ct = st.multiselect("Descrição CT", options=df["Descrição"].unique())
-    with c_f2:
-        grupos = st.multiselect("Grupo", options=df["Grupo"].unique())
+    # --- FILTROS SUPERIORES (Estilo Slicers) ---
+    c1, c2, c3 = st.columns([2, 2, 2])
+    with c1:
+        filtro_desc = st.multiselect("Descrição CT", options=df["Descrição"].unique())
+    with c2:
+        filtro_grupo = st.multiselect("Grupo", options=df["Grupo"].unique())
+    with c3:
+        filtro_maq = st.multiselect("Máquina", options=df["Máq."].unique())
 
-    # Filtros laterais (Data e Máquina)
-    st.sidebar.markdown("---")
-    data_sel = st.sidebar.date_input("Filtrar Data", value=date.today())
-    maq_sel = st.sidebar.multiselect("Máquina", options=sorted(df["Máq."].unique()))
-
-    # Aplicação dos filtros
+    # --- FILTRAGEM ---
     df_f = df.copy()
-    if desc_ct: df_f = df_f[df_f["Descrição"].isin(desc_ct)]
-    if grupos: df_f = df_f[df_f["Grupo"].isin(grupos)]
-    if maq_sel: df_f = df_f[df_f["Máq."].isin(maq_sel)]
+    if filtro_desc: df_f = df_f[df_f["Descrição"].isin(filtro_desc)]
+    if filtro_grupo: df_f = df_f[df_f["Grupo"].isin(filtro_grupo)]
+    if filtro_maq: df_f = df_f[df_f["Máq."].isin(filtro_maq)]
 
-    # Tabela principal com as colunas na ordem exata da sua imagem
-    st.subheader("Grade de Apontamentos")
-    cols_exibicao = [
-        "CT", "CT Item", "Data", "Hora Início", "Hora Fim", "Duração", 
-        "Máq.", "T", "S/N", "Grupo", "Descrição", "Material", 
-        "Descrição do PN", "Conjugado", "Qtd.", "Std PN", 
-        "Tempo_Std.", "QtPrevista.", "Nº Operadores.", "Eficiência"
-    ]
-    
-    # Exibir apenas colunas existentes no seu arquivo
-    st.dataframe(df_f[[c for c in cols_exibicao if c in df_f.columns]], use_container_width=True)
-
+    # --- GRADE DE DADOS (Layout denso) ---
+    st.dataframe(df_f, use_container_width=True, hide_index=True)
 else:
-    st.info("Por favor, faça o upload da sua planilha `.xlsx` para visualizar o layout de apontamentos.")
+    st.info("Faça o upload do arquivo para ver a grade de dados.")
